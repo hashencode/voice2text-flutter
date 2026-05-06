@@ -3,7 +3,12 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DART_FILE="$ROOT/lib/app/contracts/audio_contract.dart"
-KOTLIN_FILE="$ROOT/android/app/src/main/kotlin/com/example/voice2text_flutter/contracts/AudioContract.kt"
+KOTLIN_FILE="$(find "$ROOT/android/app/src/main/kotlin" -type f -path '*/contracts/AudioContract.kt' | head -n1)"
+
+if [[ -z "$KOTLIN_FILE" || ! -f "$KOTLIN_FILE" ]]; then
+  echo "Audio contract check failed: Kotlin AudioContract.kt not found."
+  exit 1
+fi
 
 clean_val() {
   echo "$1" | sed -E "s/^[[:space:]]+|[[:space:]]+$//g" | tr -d "'\";"

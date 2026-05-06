@@ -37,6 +37,7 @@ class RecordingController extends ChangeNotifier {
   int _elapsedMs = 0;
   String? _activeModelId;
   bool _autoTranscribeEnabled = true;
+  bool _handlingInterruption = false;
   Timer? _ticker;
 
   RecordingPhase get phase => _phase;
@@ -190,6 +191,21 @@ class RecordingController extends ChangeNotifier {
     await start();
   }
 
+  Future<InterruptionResult> handleLifecycleInterruption() async {
+    if (_handlingInterruption) return InterruptionResult.ignored;
+    if (_phase != RecordingPhase.recording && _phase != RecordingPhase.paused) {
+      return InterruptionResult.ignored;
+    }
+
+    _handlingInterruption = true;
+    try {
+      final bool saved = await stop();
+      return saved ? InterruptionResult.autoSaved : InterruptionResult.failed;
+    } finally {
+      _handlingInterruption = false;
+    }
+  }
+
   @override
   void dispose() {
     _stopTicker();
@@ -219,4 +235,10 @@ class RecordingController extends ChangeNotifier {
     _phase = next;
     notifyListeners();
   }
+}
+
+enum InterruptionResult {
+  ignored,
+  autoSaved,
+  failed,
 }

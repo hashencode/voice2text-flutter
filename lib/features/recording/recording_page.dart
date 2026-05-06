@@ -24,12 +24,15 @@ class RecordingPage extends StatefulWidget {
   State<RecordingPage> createState() => _RecordingPageState();
 }
 
-class _RecordingPageState extends State<RecordingPage> {
+class _RecordingPageState extends State<RecordingPage> with WidgetsBindingObserver {
   late final RecordingController _controller;
+  bool _interruptionHandling = false;
+  String? _pendingInterruptionNotice;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = RecordingController(
       permissionService: MicrophonePermissionService(),
       recorder: _buildRecorder(),
@@ -58,15 +61,58 @@ class _RecordingPageState extends State<RecordingPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.removeListener(_onControllerChanged);
     _controller.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _handleInterruption();
+      return;
+    }
+    if (state == AppLifecycleState.resumed) {
+      _flushPendingInterruptionNotice();
+    }
   }
 
   void _onControllerChanged() {
     if (!mounted) return;
     setState(() {});
   }
+
+  Future<void> _handleInterruption() async {
+    if (_interruptionHandling) return;
+    _interruptionHandling = true;
+
+    final result = await _controller.handleLifecycleInterruption();
+    if (!mounted) {
+      _interruptionHandling = false;
+      return;
+    }
+
+    if (result == InterruptionResult.autoSaved) {
+      _pendingInterruptionNotice = '录音因系统中断已自动停止并保存';
+    } else if (result == InterruptionResult.failed) {
+      _pendingInterruptionNotice = '录音被系统中断，自动保存失败，请重试';
+    }
+
+    _interruptionHandling = false;
+  }
+
+  void _flushPendingInterruptionNotice() {
+    final message = _pendingInterruptionNotice;
+    if (message == null || !mounted) return;
+
+    _pendingInterruptionNotice = null;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+    }
 
   Future<void> _openSettings() async {
     await Navigator.of(context).pushNamed('/settings');
