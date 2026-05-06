@@ -1,0 +1,11 @@
+# Copy this file to android/key.properties and fill with your real values.
+# Never commit android/key.properties.
+
+# Android app id used by build.gradle.kts (must be unique)
+applicationId=com.example.voice2text
+
+# Signing keystore settings
+storeFile=/tmp/upload-keystore.jks
+storePassword=REPLACE_ME
+keyAlias=upload
+keyPassword=REPLACE_ME

@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DART_FILE="$ROOT/lib/app/contracts/audio_contract.dart"
+KOTLIN_FILE="$ROOT/android/app/src/main/kotlin/com/example/voice2text_flutter/contracts/AudioContract.kt"
+
+clean_val() {
+  echo "$1" | sed -E "s/^[[:space:]]+|[[:space:]]+$//g" | tr -d "'\";"
+}
+
+extract_dart() {
+  local key="$1"
+  local line
+  line="$(rg "static const .* ${key} =" "$DART_FILE")"
+  clean_val "$(echo "$line" | cut -d '=' -f2-)"
+}
+
+extract_kotlin() {
+  local key="$1"
+  local line
+  line="$(rg "const val ${key} =" "$KOTLIN_FILE")"
+  clean_val "$(echo "$line" | cut -d '=' -f2-)"
+}
+
+pairs=(
+  "recorderChannel:RECORDER_CHANNEL"
+  "recordingDirName:RECORDING_DIR_NAME"
+  "recordingExtension:RECORDING_EXTENSION"
+  "sampleRateHz:SAMPLE_RATE_HZ"
+  "bitRate:BIT_RATE"
+  "channelCount:CHANNEL_COUNT"
+  "containerFormat:CONTAINER_FORMAT"
+  "codec:CODEC"
+)
+
+failed=0
+for pair in "${pairs[@]}"; do
+  dart_key="${pair%%:*}"
+  kotlin_key="${pair##*:}"
+
+  dart_val="$(extract_dart "$dart_key")"
+  kotlin_val="$(extract_kotlin "$kotlin_key")"
+
+  if [[ "$dart_val" != "$kotlin_val" ]]; then
+    echo "MISMATCH: $dart_key=$dart_val vs $kotlin_key=$kotlin_val"
+    failed=1
+  fi
+done
+
+if [[ "$failed" -eq 1 ]]; then
+  echo "Audio contract check failed."
+  exit 1
+fi
+
+echo "Audio contract check passed."

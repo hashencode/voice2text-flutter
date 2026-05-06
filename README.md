@@ -1,0 +1,75 @@
+# voice2text_flutter
+
+Flutter 版本重构工程（Android 优先）。
+
+## 常用命令
+
+在本目录执行：
+
+```bash
+# 轻量自检：契约 + analyze + test
+./tool/dev_check.sh
+
+# 全量自检：含 debug APK 构建
+./tool/dev_check.sh --with-build
+
+# 单独构建
+flutter build apk --debug
+
+# Android 冒烟（安装+启动+抓日志）
+./tool/run_android_smoke.sh
+
+# 转写日志判定（检查最新 smoke 日志）
+./tool/check_transcribe_log.sh
+
+# 清理真机转码临时 wav（默认保留最近 10 个）
+./tool/clean_transcoded_audio.sh 8PXCGQZPEQJNP7U8 10
+
+# 版本号更新
+./tool/bump_version.sh --set 1.0.1+2
+
+# 发布前检查（会给出 warning/error）
+./tool/preflight_release.sh
+```
+
+## 目录说明（当前阶段）
+
+- `lib/features/recording/`：录音流程与状态机
+- `lib/features/transcription/`：转写任务列表与重试
+- `lib/features/records/`：录音记录列表、详情、删除
+- `lib/features/settings/`：模型选择与自动转写配置
+- `lib/data/sqlite/`：本地数据库
+- `lib/app/contracts/`：Dart 侧音频/通道契约
+- `android/app/src/main/kotlin/.../contracts/`：Android 侧契约
+- `tool/check_audio_contract.sh`：契约一致性校验
+- `tool/dev_check.sh`：开发自检入口
+
+## 当前状态
+
+- Android 录音已接入 `MediaRecorder` 实现
+- Real 转写链路可用：`m4a` 录音 -> 原生转码 `wav(16k mono)` -> Sherpa JNI 识别
+- 数据闭环：录音保存 -> 转写入队/执行 -> 任务列表可重试
+- App 底部显示当前安装包信息（包名/版本/安装时间），便于确认是否为最新构建
+
+
+## Release 配置
+
+1. 生成本地配置：`./tool/init_key_properties.sh`
+2. 交互式快速填写：`./tool/fix_key_properties.sh`
+3. 安全写入签名密码：`./tool/set_signing_passwords.sh`
+4. 或手动填写 `applicationId` 与 keystore 四项：`storeFile/storePassword/keyAlias/keyPassword`
+5. 执行：`./tool/preflight_release.sh`
+6. 构建 release：`flutter build apk --release`
+
+
+## Beta 发布
+
+- 参考清单：`docs/BETA_RELEASE_CHECKLIST.md`
+
+
+## Sherpa 接入状态
+
+- `engineMode=auto` 当前已默认走 Android `real` 引擎路径。
+- Real 引擎已接入真实 JNI 推理调用。
+- 自动转写链路：`m4a` 录音 -> 原生转码 `wav(16k mono)` -> Sherpa 识别（真机实测通过，已出现 `transcribe ok` 日志）。
+- 已支持转码缓存清理与识别链路日志（tag: `Voice2TextNative`）。
