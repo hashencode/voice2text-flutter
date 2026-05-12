@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../settings/repository/app_settings_repository.dart';
+import '../shared/utils/formatters.dart';
 import '../shared/widgets/build_info_footer.dart';
 import '../shared/widgets/common_empty_state.dart';
 import 'model/transcription_job_entity.dart';
@@ -18,6 +20,7 @@ class TranscriptionPage extends StatefulWidget {
 
 class _TranscriptionPageState extends State<TranscriptionPage> {
   final TranscriptionJobsRepository _repository = TranscriptionJobsRepository();
+  final AppSettingsRepository _settingsRepository = AppSettingsRepository();
   late final TranscriptionPort _service;
 
   List<TranscriptionJobEntity> _jobs = <TranscriptionJobEntity>[];
@@ -76,7 +79,7 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
         TranscriptionRequest(
           recordingPath: job.recordingPath,
           durationMs: job.durationMs,
-          modelId: 'paraformer-zh',
+          modelId: (await _settingsRepository.load()).modelId,
         ),
       );
 
@@ -94,7 +97,7 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
         status: 'failed',
         errorMessage: e.toString(),
       );
-      messenger.showSnackBar(SnackBar(content: Text('任务 #$id 重试失败')));
+      messenger.showSnackBar(SnackBar(content: Text('任务 #$id 重试失败: $e')));
     } finally {
       if (mounted) {
         setState(() {
@@ -124,7 +127,7 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
               ? const CommonEmptyState(
                   icon: Icons.text_snippet_outlined,
                   title: '暂无转写任务',
-                  description: '录音停止并保存后，会自动进入转写任务队列。',
+                  description: '录音停止并保存后，会自动进入转写任务队列；也可在录音页关闭自动转写。',
                 )
               : ListView.separated(
                   padding: const EdgeInsets.all(12),
@@ -142,7 +145,7 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
                           leading: _StatusDot(status: job.status),
                           title: Text('任务 #${job.id}  ${_statusLabel(job.status)}'),
                           subtitle: Text(
-                            job.resultText ?? job.errorMessage ?? job.recordingPath,
+                            _buildSubtitle(job),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -181,6 +184,12 @@ class _TranscriptionPageState extends State<TranscriptionPage> {
       default:
         return status;
     }
+  }
+
+  String _buildSubtitle(TranscriptionJobEntity job) {
+    final String primary = job.resultText ?? job.errorMessage ?? job.recordingPath;
+    final String updated = DateTime.fromMillisecondsSinceEpoch(job.updatedAtMs).toString();
+    return '$primary\n更新于: $updated · 时长: ${formatDurationMs(job.durationMs)}';
   }
 }
 

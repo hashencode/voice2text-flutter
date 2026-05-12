@@ -27,7 +27,7 @@ else
 fi
 
 CONTRACT_DART="$ROOT/lib/app/contracts/audio_contract.dart"
-CONTRACT_KT="$ROOT/android/app/src/main/kotlin/com/example/voice2text_flutter/contracts/AudioContract.kt"
+CONTRACT_KT="$ROOT/android/app/src/main/kotlin/com/voice2text/app/contracts/AudioContract.kt"
 KEY_PROPS="$ROOT/android/key.properties"
 KEY_EXAMPLE="$ROOT/android/key.properties.example"
 

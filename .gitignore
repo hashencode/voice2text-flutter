@@ -1,6 +1,7 @@
 # Miscellaneous
 *.class
 *.log
+voice2text.db
 *.pyc
 *.swp
 .DS_Store

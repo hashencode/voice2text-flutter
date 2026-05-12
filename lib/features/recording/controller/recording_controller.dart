@@ -38,6 +38,7 @@ class RecordingController extends ChangeNotifier {
   String? _activeModelId;
   bool _autoTranscribeEnabled = true;
   bool _handlingInterruption = false;
+  bool _permissionDenied = false;
   Timer? _ticker;
 
   RecordingPhase get phase => _phase;
@@ -45,6 +46,7 @@ class RecordingController extends ChangeNotifier {
   int get elapsedMs => _elapsedMs;
   String? get activeModelId => _activeModelId;
   bool get autoTranscribeEnabled => _autoTranscribeEnabled;
+  bool get permissionDenied => _permissionDenied;
 
   bool get canStart => _phase == RecordingPhase.idle || _phase == RecordingPhase.error;
   bool get canPause => _phase == RecordingPhase.recording;
@@ -86,7 +88,8 @@ class RecordingController extends ChangeNotifier {
 
     final bool granted = await _permissionService.ensurePermissionGranted();
     if (!granted) {
-      _setError('麦克风权限未开启');
+      _permissionDenied = true;
+      _setError('麦克风权限未开启，请在系统设置中允许麦克风访问');
       return;
     }
 
@@ -94,6 +97,7 @@ class RecordingController extends ChangeNotifier {
       await reloadSettings();
 
       await _recorder.start();
+      _permissionDenied = false;
       _errorMessage = null;
       _elapsedMs = 0;
       _startTicker();
@@ -162,12 +166,14 @@ class RecordingController extends ChangeNotifier {
             status: 'completed',
             resultText: text,
           );
+          debugPrint('transcribe ok jobId=$jobId durationMs=${result.durationMs}');
         } catch (e) {
           await _transcriptionJobsRepository.updateStatus(
             id: jobId,
             status: 'failed',
             errorMessage: e.toString(),
           );
+          debugPrint('transcribe failed jobId=$jobId error=$e');
         }
       }
 

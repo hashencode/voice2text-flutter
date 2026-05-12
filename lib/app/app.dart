@@ -12,7 +12,7 @@ class Voice2TextApp extends StatelessWidget {
       title: 'Voice2Text',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
-      initialRoute: AppRoutes.recording,
+      initialRoute: AppRoutes.home,
       routes: AppRoutes.map,
     );
   }

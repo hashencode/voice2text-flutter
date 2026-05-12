@@ -1,20 +1,23 @@
 import 'package:flutter/widgets.dart';
 
+import '../features/home/home_page.dart';
 import '../features/recording/recording_page.dart';
 import '../features/records/records_page.dart';
 import '../features/settings/settings_page.dart';
 import '../features/transcription/transcription_page.dart';
 
 class AppRoutes {
+  static const String home = '/';
   static const String recording = '/recording';
   static const String transcription = '/transcription';
   static const String records = '/records';
   static const String settings = '/settings';
 
   static Map<String, WidgetBuilder> get map => <String, WidgetBuilder>{
-        recording: (_) => const RecordingPage(),
-        transcription: (_) => const TranscriptionPage(),
-        records: (_) => const RecordsPage(),
-        settings: (_) => const SettingsPage(),
-      };
+    home: (_) => const HomePage(),
+    recording: (_) => const RecordingPage(),
+    transcription: (_) => const TranscriptionPage(),
+    records: (_) => const RecordsPage(),
+    settings: (_) => const SettingsPage(),
+  };
 }
