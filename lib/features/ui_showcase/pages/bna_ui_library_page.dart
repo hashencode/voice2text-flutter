@@ -9,6 +9,8 @@ import 'button_component_page.dart';
 import 'card_component_page.dart';
 import 'component_placeholder_page.dart';
 import 'input_component_page.dart';
+import 'icon_component_page.dart';
+import 'link_component_page.dart';
 import 'spinner_component_page.dart';
 import 'text_component_page.dart';
 
@@ -207,7 +209,9 @@ class _BnaUiLibraryPageState extends State<BnaUiLibraryPage> {
     final Widget page = switch (component.slug) {
       'button' => const BnaButtonComponentPage(),
       'card' => const BnaCardComponentPage(),
+      'icon' => const BnaIconComponentPage(),
       'input' => const BnaInputComponentPage(),
+      'link' => const BnaLinkComponentPage(),
       'spinner' => const BnaSpinnerComponentPage(),
       'text' => const BnaTextComponentPage(),
       _ => BnaComponentPlaceholderPage(component: component),

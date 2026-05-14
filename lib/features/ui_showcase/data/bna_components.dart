@@ -166,7 +166,7 @@ const List<BnaComponentDefinition> bnaComponents = <BnaComponentDefinition>[
     name: 'Icon',
     slug: 'icon',
     description: 'Shared icon wrapper and sizing.',
-    status: BnaComponentStatus.planned,
+    status: BnaComponentStatus.migrated,
   ),
   BnaComponentDefinition(
     name: 'Image',
@@ -191,7 +191,7 @@ const List<BnaComponentDefinition> bnaComponents = <BnaComponentDefinition>[
     name: 'Link',
     slug: 'link',
     description: 'Inline navigation and actions.',
-    status: BnaComponentStatus.planned,
+    status: BnaComponentStatus.migrated,
   ),
   BnaComponentDefinition(
     name: 'MediaPicker',

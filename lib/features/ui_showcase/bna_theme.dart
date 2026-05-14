@@ -13,6 +13,7 @@ class BnaShowcaseColors {
     required this.border,
     required this.text,
     required this.textMuted,
+    required this.icon,
     required this.green,
     required this.red,
     required this.blue,
@@ -29,6 +30,7 @@ class BnaShowcaseColors {
   final Color border;
   final Color text;
   final Color textMuted;
+  final Color icon;
   final Color green;
   final Color red;
   final Color blue;
@@ -45,6 +47,7 @@ class BnaShowcaseColors {
     border: Color(0xFFC6C6C8),
     text: Color(0xFF000000),
     textMuted: Color(0xFF71717A),
+    icon: Color(0xFF71717A),
     green: Color(0xFF34C759),
     red: Color(0xFFFF3B30),
     blue: Color(0xFF007AFF),
@@ -62,6 +65,7 @@ class BnaShowcaseColors {
     border: Color(0xFF38383A),
     text: Color(0xFFFFFFFF),
     textMuted: Color(0xFFA1A1AA),
+    icon: Color(0xFFA1A1AA),
     green: Color(0xFF30D158),
     red: Color(0xFFFF453A),
     blue: Color(0xFF0A84FF),

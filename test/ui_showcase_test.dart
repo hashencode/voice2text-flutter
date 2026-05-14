@@ -1,15 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:url_launcher_platform_interface/link.dart';
 import 'package:voice2text_flutter/features/ui_showcase/pages/button_component_page.dart';
 import 'package:voice2text_flutter/features/ui_showcase/pages/card_component_page.dart';
 import 'package:voice2text_flutter/features/ui_showcase/pages/input_component_page.dart';
+import 'package:voice2text_flutter/features/ui_showcase/pages/link_component_page.dart';
 import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_button.dart';
 import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_card.dart';
+import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_icon.dart';
+import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_link.dart';
 import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_showcase_shell.dart';
 import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_text.dart';
+import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
+
+class _CapturingUrlLauncher extends UrlLauncherPlatform {
+  String? lastUrl;
+  PreferredLaunchMode? lastMode;
+
+  @override
+  final LinkDelegate? linkDelegate = null;
+
+  @override
+  Future<bool> launchUrl(String url, LaunchOptions options) async {
+    lastUrl = url;
+    lastMode = options.mode;
+    return true;
+  }
+}
 
 void main() {
+  late UrlLauncherPlatform originalUrlLauncher;
+
+  setUp(() {
+    originalUrlLauncher = UrlLauncherPlatform.instance;
+  });
+
+  tearDown(() {
+    UrlLauncherPlatform.instance = originalUrlLauncher;
+  });
+
   testWidgets('icon-only button does not render label content', (
     WidgetTester tester,
   ) async {
@@ -28,6 +58,21 @@ void main() {
 
     expect(find.byIcon(LucideIcons.settings300), findsOneWidget);
     expect(find.text('Ignored label'), findsNothing);
+  });
+
+  testWidgets('icon stroke width maps to the closest lucide weight family', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: BnaIcon(icon: LucideIcons.zap300, strokeWidth: 1.5),
+        ),
+      ),
+    );
+
+    final Icon icon = tester.widget<Icon>(find.byType(Icon));
+    expect(icon.icon?.fontFamily, 'Lucide300');
   });
 
   testWidgets('input showcase lazily builds lower demo sections', (
@@ -266,4 +311,87 @@ void main() {
       expect(find.byIcon(LucideIcons.bell300), findsOneWidget);
     },
   );
+
+  testWidgets('link opens internal destinations inside the showcase', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: BnaLinkComponentPage()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Go to Profile'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('Resolved Route'), findsOneWidget);
+    expect(find.text('/'), findsAtLeastNWidgets(1));
+  });
+
+  testWidgets('external link uses in-app browser mode by default', (
+    WidgetTester tester,
+  ) async {
+    final _CapturingUrlLauncher launcher = _CapturingUrlLauncher();
+    UrlLauncherPlatform.instance = launcher;
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: BnaLink.text('Visit GitHub', href: 'https://github.com'),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Visit GitHub'));
+    await tester.pumpAndSettle();
+
+    expect(launcher.lastUrl, 'https://github.com');
+    expect(launcher.lastMode, PreferredLaunchMode.inAppBrowserView);
+  });
+
+  testWidgets('asChild button links stay visually enabled and still navigate', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: BnaLink(
+            href: '/',
+            asChild: true,
+            child: BnaButton(
+              onPressed: null,
+              icon: LucideIcons.house300,
+              child: const Text('Welcome'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Welcome'), findsOneWidget);
+
+    await tester.tap(find.text('Welcome'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Internal Route'), findsOneWidget);
+  });
+
+  testWidgets('native app links use external application mode', (
+    WidgetTester tester,
+  ) async {
+    final _CapturingUrlLauncher launcher = _CapturingUrlLauncher();
+    UrlLauncherPlatform.instance = launcher;
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: BnaLink.text('Call Phone', href: 'tel:+1234567890'),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Call Phone'));
+    await tester.pumpAndSettle();
+
+    expect(launcher.lastUrl, 'tel:+1234567890');
+    expect(launcher.lastMode, PreferredLaunchMode.externalApplication);
+  });
 }
