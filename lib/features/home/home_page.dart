@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 
+import '../../app/router.dart';
 import '../../app/theme/theme_mode_controller.dart';
 import 'model/folder_entity.dart';
 import 'repository/folders_repository.dart';
@@ -155,7 +156,8 @@ class _HomePageState extends State<HomePage> {
     const _HomeTabSpec(id: _allTab, label: '全部音频'),
     const _HomeTabSpec(id: _meetingTab, label: '会议音频'),
     ..._folders.map(
-      (FolderEntity folder) => _HomeTabSpec(id: folder.name, label: folder.name),
+      (FolderEntity folder) =>
+          _HomeTabSpec(id: folder.name, label: folder.name),
     ),
     const _HomeTabSpec(id: _recentlyDeletedTab, label: '最近删除'),
   ];
@@ -756,9 +758,7 @@ class _HomePageState extends State<HomePage> {
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(item.favorite ? '已取消收藏样式占位' : '已收藏样式占位'),
-        ),
+        SnackBar(content: Text(item.favorite ? '已取消收藏样式占位' : '已收藏样式占位')),
       );
       return;
     }
@@ -776,9 +776,7 @@ class _HomePageState extends State<HomePage> {
     });
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(
-      SnackBar(content: Text(nextFavorite ? '已收藏文件' : '已取消收藏文件')),
-    );
+    ).showSnackBar(SnackBar(content: Text(nextFavorite ? '已收藏文件' : '已取消收藏文件')));
   }
 
   Future<void> _openItem(_RecordingPreview item) async {
@@ -854,9 +852,7 @@ class _HomePageState extends State<HomePage> {
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
               child: Text(
-                hasPlaceholder
-                    ? '移除'
-                    : (isRecentlyDeleted ? '彻底删除' : '确认删除'),
+                hasPlaceholder ? '移除' : (isRecentlyDeleted ? '彻底删除' : '确认删除'),
               ),
             ),
           ],
@@ -954,8 +950,9 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final HomePagePalette palette = HomePagePalette.of(context);
-    final AppThemeModeController? themeController =
-        AppThemeModeScope.maybeOf(context);
+    final AppThemeModeController? themeController = AppThemeModeScope.maybeOf(
+      context,
+    );
     final double bottomInset = MediaQuery.of(context).padding.bottom;
     final double fabBottom = bottomInset + HomePageMetrics.fabBottomSpacing;
     final double selectionToolbarInset =
@@ -1008,6 +1005,16 @@ class _HomePageState extends State<HomePage> {
                       _createFolder();
                     },
                   ),
+                  if (!_isSelectionMode)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: _UiShowcaseEntryCard(
+                        palette: palette,
+                        onTap: () {
+                          Navigator.of(context).pushNamed(AppRoutes.uiShowcase);
+                        },
+                      ),
+                    ),
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
@@ -1104,9 +1111,9 @@ class _HomeHeader extends StatelessWidget {
               child: _HeaderTextButton(
                 label: '取消',
                 onPressed: onCancelSelection,
-                style: HomePageTextStyles.selectionAction(palette).copyWith(
-                  color: palette.favorite,
-                ),
+                style: HomePageTextStyles.selectionAction(
+                  palette,
+                ).copyWith(color: palette.favorite),
               ),
             ),
           ),
@@ -1134,9 +1141,7 @@ class _HomeHeader extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
-        Expanded(
-          child: Text('音频', style: HomePageTextStyles.title(palette)),
-        ),
+        Expanded(child: Text('音频', style: HomePageTextStyles.title(palette))),
         _HeaderIconButton(
           palette: palette,
           icon: LucideIcons.search300,
@@ -1158,6 +1163,83 @@ class _HomeHeader extends StatelessWidget {
           onPressed: onTheme,
         ),
       ],
+    );
+  }
+}
+
+class _UiShowcaseEntryCard extends StatelessWidget {
+  const _UiShowcaseEntryCard({required this.palette, required this.onTap});
+
+  final HomePagePalette palette;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: palette.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: palette.divider),
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: palette.fabShadow,
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            child: Row(
+              children: <Widget>[
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: palette.surfaceActive,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    LucideIcons.package300,
+                    color: palette.text,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'BNA UI 组件库',
+                        style: HomePageTextStyles.rowTitle(
+                          palette,
+                        ).copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '查看 Flutter 迁移目录与实时交互 Demo',
+                        style: HomePageTextStyles.meta(palette),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Icon(
+                  LucideIcons.chevronRight300,
+                  color: palette.mutedText,
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1397,10 +1479,7 @@ class _HomeListRow extends StatelessWidget {
                   ),
                 ),
                 selectionMode
-                    ? _SelectionIndicator(
-                        palette: palette,
-                        selected: selected,
-                      )
+                    ? _SelectionIndicator(palette: palette, selected: selected)
                     : _MoreButton(palette: palette, onPressed: onMorePressed),
               ],
             ),
@@ -1572,9 +1651,7 @@ class _SelectionToolbarButton extends StatelessWidget {
                   label,
                   style: HomePageTextStyles.selectionToolbarLabel(
                     palette,
-                  ).copyWith(
-                    color: resolvedColor,
-                  ),
+                  ).copyWith(color: resolvedColor),
                 ),
               ],
             ),
@@ -1629,9 +1706,7 @@ class _ActionSheetItem extends StatelessWidget {
                     label,
                     style: HomePageTextStyles.actionSheetOption(
                       palette,
-                    ).copyWith(
-                      color: color,
-                    ),
+                    ).copyWith(color: color),
                   ),
                 ),
               ],
@@ -1930,11 +2005,7 @@ class _IconTab extends StatelessWidget {
         child: SizedBox(
           width: HomePageMetrics.tabHeight,
           height: HomePageMetrics.tabHeight,
-          child: Icon(
-            LucideIcons.library300,
-            size: 18,
-            color: palette.text,
-          ),
+          child: Icon(LucideIcons.library300, size: 18, color: palette.text),
         ),
       ),
     );
@@ -1991,26 +2062,22 @@ class _IconActionButton extends StatelessWidget {
         child: InkWell(
           onTap: onPressed,
           borderRadius: BorderRadius.circular(HomePageMetrics.iconActionRadius),
-          overlayColor: WidgetStateProperty.resolveWith<Color?>(
-            (Set<WidgetState> states) {
-              if (states.contains(WidgetState.pressed)) {
-                return palette.surfaceActive;
-              }
-              if (states.contains(WidgetState.hovered) ||
-                  states.contains(WidgetState.focused)) {
-                return palette.surfaceActive.withValues(
-                  alpha: HomePageMetrics.iconActionHoverOpacity,
-                );
-              }
-              return null;
-            },
-          ),
+          overlayColor: WidgetStateProperty.resolveWith<Color?>((
+            Set<WidgetState> states,
+          ) {
+            if (states.contains(WidgetState.pressed)) {
+              return palette.surfaceActive;
+            }
+            if (states.contains(WidgetState.hovered) ||
+                states.contains(WidgetState.focused)) {
+              return palette.surfaceActive.withValues(
+                alpha: HomePageMetrics.iconActionHoverOpacity,
+              );
+            }
+            return null;
+          }),
           child: Center(
-            child: Icon(
-              icon,
-              size: iconSize,
-              color: palette.text,
-            ),
+            child: Icon(icon, size: iconSize, color: palette.text),
           ),
         ),
       ),
