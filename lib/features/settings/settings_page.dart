@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/theme/theme_mode_controller.dart';
 import 'model/app_settings.dart';
 import 'repository/app_settings_repository.dart';
 import '../shared/widgets/build_info_footer.dart';
@@ -17,6 +18,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _loading = true;
   String _modelId = 'paraformer-zh';
   bool _autoTranscribe = true;
+  bool _isDarkMode = false;
 
   final List<String> _modelOptions = <String>[
     'paraformer-zh',
@@ -36,18 +38,24 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _modelId = settings.modelId;
       _autoTranscribe = settings.autoTranscribe;
+      _isDarkMode = settings.isDarkMode;
       _loading = false;
     });
   }
 
   Future<void> _save() async {
     final messenger = ScaffoldMessenger.of(context);
+    final AppThemeModeController themeController = AppThemeModeScope.of(
+      context,
+    );
     await _repository.save(
       AppSettings(
         modelId: _modelId,
         autoTranscribe: _autoTranscribe,
+        isDarkMode: _isDarkMode,
       ),
     );
+    await themeController.setDarkMode(_isDarkMode);
     if (!mounted) return;
     messenger.showSnackBar(const SnackBar(content: Text('设置已保存')));
   }
@@ -109,6 +117,19 @@ class _SettingsPageState extends State<SettingsPage> {
               onChanged: (bool value) {
                 setState(() {
                   _autoTranscribe = value;
+                });
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: SwitchListTile(
+              title: const Text('深色模式'),
+              subtitle: const Text('切换全局界面的明暗主题'),
+              value: _isDarkMode,
+              onChanged: (bool value) {
+                setState(() {
+                  _isDarkMode = value;
                 });
               },
             ),

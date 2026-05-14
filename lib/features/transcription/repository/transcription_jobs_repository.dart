@@ -47,6 +47,22 @@ class TranscriptionJobsRepository {
     return TranscriptionJobEntity.fromMap(rows.first);
   }
 
+  Future<TranscriptionJobEntity?> findLatestByRecordingPath(
+    String recordingPath,
+  ) async {
+    final db = await _database.database;
+    final rows = await db.query(
+      'transcription_jobs',
+      where: 'recording_path = ?',
+      whereArgs: <Object>[recordingPath],
+      orderBy: 'updated_at_ms DESC, id DESC',
+      limit: 1,
+    );
+
+    if (rows.isEmpty) return null;
+    return TranscriptionJobEntity.fromMap(rows.first);
+  }
+
   Future<void> deleteByRecordingPath(String recordingPath) async {
     final db = await _database.database;
     await db.delete(

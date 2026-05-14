@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import '../shared/utils/formatters.dart';
 import '../shared/widgets/build_info_footer.dart';
 import '../shared/widgets/common_empty_state.dart';
-import '../transcription/repository/transcription_jobs_repository.dart';
 import 'model/recording_entity.dart';
 import 'repository/recordings_repository.dart';
+import 'package:path/path.dart' as p;
+import 'widgets/recording_details_sheet.dart';
 
 class RecordsPage extends StatefulWidget {
   const RecordsPage({super.key});
@@ -16,7 +17,6 @@ class RecordsPage extends StatefulWidget {
 
 class _RecordsPageState extends State<RecordsPage> {
   final RecordingsRepository _repository = RecordingsRepository();
-  final TranscriptionJobsRepository _transcriptionJobsRepository = TranscriptionJobsRepository();
 
   List<RecordingEntity> _items = <RecordingEntity>[];
   bool _loading = true;
@@ -31,7 +31,7 @@ class _RecordsPageState extends State<RecordsPage> {
     setState(() {
       _loading = true;
     });
-    final items = await _repository.listRecent();
+    final items = await _repository.listActive();
     if (!mounted) return;
     setState(() {
       _items = items;
@@ -76,29 +76,13 @@ class _RecordsPageState extends State<RecordsPage> {
   }
 
   void _showDetails(RecordingEntity item) {
-    showModalBottomSheet<void>(
+    showRecordingDetailsSheet(
       context: context,
-      showDragHandle: true,
-      builder: (BuildContext context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text('录音 #${item.id}', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 12),
-                Text('时长: ${formatDurationMs(item.durationMs)}'),
-                const SizedBox(height: 8),
-                Text('路径: ${item.filePath}'),
-                const SizedBox(height: 8),
-                Text('创建时间: ${DateTime.fromMillisecondsSinceEpoch(item.createdAtMs)}'),
-              ],
-            ),
-          ),
-        );
-      },
+      title: _displayTitle(item),
+      path: item.filePath,
+      durationMs: item.durationMs,
+      createdAtMs: item.createdAtMs,
+      latestJob: null,
     );
   }
 
@@ -125,11 +109,12 @@ class _RecordsPageState extends State<RecordsPage> {
 
     if (confirmed != true) return;
 
-    await _repository.deleteById(item.id);
-    await _transcriptionJobsRepository.deleteByRecordingPath(item.filePath);
+    await _repository.softDeleteById(item.id);
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已删除记录并清理关联转写任务')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已移入最近删除')),
+    );
     await _load();
   }
 
@@ -149,42 +134,50 @@ class _RecordsPageState extends State<RecordsPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _items.isEmpty
-              ? const CommonEmptyState(
-                  icon: Icons.library_music_outlined,
-                  title: '暂无录音记录',
-                  description: '先回到录音页完成一次录音并保存，记录会出现在这里。',
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: _items.length,
-                  separatorBuilder: (BuildContext context, int index) => const SizedBox(height: 8),
-                  itemBuilder: (BuildContext context, int index) {
-                    final item = _items[index];
-                    return Card(
-                      child: ListTile(
-                        leading: const CircleAvatar(
-                          child: Icon(Icons.mic_none),
-                        ),
-                        title: Text('录音 #${item.id}'),
-                        subtitle: Text(
-                          '${formatDurationMs(item.durationMs)}  •  ${item.filePath}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        onTap: () {
-                          _showDetails(item);
-                        },
-                        onLongPress: () {
-                          _showItemActions(item);
-                        },
-                      ),
-                    );
-                  },
-                ),
-      bottomNavigationBar: const SafeArea(
-        top: false,
-        child: BuildInfoFooter(),
-      ),
+          ? const CommonEmptyState(
+              icon: Icons.library_music_outlined,
+              title: '暂无录音记录',
+              description: '先回到录音页完成一次录音并保存，记录会出现在这里。',
+            )
+          : ListView.separated(
+              padding: const EdgeInsets.all(12),
+              itemCount: _items.length,
+              separatorBuilder: (BuildContext context, int index) =>
+                  const SizedBox(height: 8),
+              itemBuilder: (BuildContext context, int index) {
+                final item = _items[index];
+                return Card(
+                  child: ListTile(
+                    leading: const CircleAvatar(child: Icon(Icons.mic_none)),
+                    title: Text(_displayTitle(item)),
+                    subtitle: Text(
+                      '${formatDurationMs(item.durationMs)}  •  ${item.filePath}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onTap: () {
+                      _showDetails(item);
+                    },
+                    onLongPress: () {
+                      _showItemActions(item);
+                    },
+                  ),
+                );
+              },
+            ),
+      bottomNavigationBar: const SafeArea(top: false, child: BuildInfoFooter()),
     );
+  }
+
+  String _displayTitle(RecordingEntity item) {
+    final String? displayName = item.displayName?.trim();
+    if (displayName != null && displayName.isNotEmpty) {
+      return displayName;
+    }
+    final String filename = p.basenameWithoutExtension(item.filePath).trim();
+    if (filename.isNotEmpty) {
+      return filename;
+    }
+    return '录音 #${item.id}';
   }
 }

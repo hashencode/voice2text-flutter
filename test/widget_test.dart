@@ -9,9 +9,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('音频'), findsOneWidget);
-    expect(find.byIcon(LucideIcons.search300), findsOneWidget);
+    expect(find.text('全部音频'), findsOneWidget);
+    expect(find.byIcon(LucideIcons.search300), findsWidgets);
     expect(find.byIcon(LucideIcons.mic300), findsOneWidget);
-    expect(find.text('导入音频-2605071125'), findsOneWidget);
   });
 
   testWidgets('home page navigates to recording page', (

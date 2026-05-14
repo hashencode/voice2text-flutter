@@ -19,12 +19,16 @@ class AppDatabase {
 
     return openDatabase(
       path,
-      version: 3,
+      version: 8,
       onCreate: (Database db, int version) async {
         await db.execute('''
           CREATE TABLE recordings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             file_path TEXT NOT NULL,
+            display_name TEXT,
+            group_name TEXT,
+            deleted_at_ms INTEGER,
+            is_favorite INTEGER NOT NULL DEFAULT 0,
             duration_ms INTEGER NOT NULL,
             created_at_ms INTEGER NOT NULL
           )
@@ -47,7 +51,16 @@ class AppDatabase {
           CREATE TABLE app_settings (
             id INTEGER PRIMARY KEY,
             model_id TEXT NOT NULL,
-            auto_transcribe INTEGER NOT NULL
+            auto_transcribe INTEGER NOT NULL,
+            is_dark_mode INTEGER NOT NULL DEFAULT 0
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE folders (
+            name TEXT PRIMARY KEY,
+            created_at_ms INTEGER NOT NULL,
+            is_favorite INTEGER NOT NULL DEFAULT 0
           )
         ''');
       },
@@ -72,7 +85,45 @@ class AppDatabase {
             CREATE TABLE app_settings (
               id INTEGER PRIMARY KEY,
               model_id TEXT NOT NULL,
-              auto_transcribe INTEGER NOT NULL
+              auto_transcribe INTEGER NOT NULL,
+              is_dark_mode INTEGER NOT NULL DEFAULT 0
+            )
+          ''');
+        }
+
+        if (oldVersion < 4) {
+          await db.execute(
+            'ALTER TABLE recordings ADD COLUMN display_name TEXT',
+          );
+        }
+
+        if (oldVersion < 5) {
+          await db.execute(
+            'ALTER TABLE recordings ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0',
+          );
+        }
+
+        if (oldVersion < 6) {
+          await db.execute(
+            'ALTER TABLE recordings ADD COLUMN deleted_at_ms INTEGER',
+          );
+        }
+
+        if (oldVersion < 7) {
+          await db.execute(
+            'ALTER TABLE app_settings ADD COLUMN is_dark_mode INTEGER NOT NULL DEFAULT 0',
+          );
+        }
+
+        if (oldVersion < 8) {
+          await db.execute(
+            'ALTER TABLE recordings ADD COLUMN group_name TEXT',
+          );
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS folders (
+              name TEXT PRIMARY KEY,
+              created_at_ms INTEGER NOT NULL,
+              is_favorite INTEGER NOT NULL DEFAULT 0
             )
           ''');
         }

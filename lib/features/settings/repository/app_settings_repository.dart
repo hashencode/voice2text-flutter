@@ -22,6 +22,7 @@ class AppSettingsRepository {
     return AppSettings(
       modelId: row['model_id'] as String,
       autoTranscribe: (row['auto_transcribe'] as int) == 1,
+      isDarkMode: (row['is_dark_mode'] as int? ?? 0) == 1,
     );
   }
 
@@ -33,6 +34,7 @@ class AppSettingsRepository {
         'id': 1,
         'model_id': settings.modelId,
         'auto_transcribe': settings.autoTranscribe ? 1 : 0,
+        'is_dark_mode': settings.isDarkMode ? 1 : 0,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
