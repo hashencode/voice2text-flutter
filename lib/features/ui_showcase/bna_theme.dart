@@ -34,9 +34,9 @@ class BnaShowcaseColors {
   final Color blue;
 
   static const BnaShowcaseColors light = BnaShowcaseColors(
-    background: Color(0xFFFFFFFF),
+    background: Color(0xFFF5F5F5),
     foreground: Color(0xFF000000),
-    card: Color(0xFFF2F2F7),
+    card: Color(0xFFFFFFFF),
     cardForeground: Color(0xFF000000),
     primary: Color(0xFF18181B),
     primaryForeground: Color(0xFFFFFFFF),
@@ -85,21 +85,21 @@ class BnaShowcaseMetrics {
 class BnaShowcaseTextStyles {
   static TextStyle heading(BnaShowcaseColors colors) => TextStyle(
     fontSize: 28,
-    fontWeight: FontWeight.w800,
+    fontWeight: FontWeight.w500,
     color: colors.text,
     height: 1.1,
   );
 
   static TextStyle title(BnaShowcaseColors colors) => TextStyle(
     fontSize: 24,
-    fontWeight: FontWeight.w700,
+    fontWeight: FontWeight.w500,
     color: colors.text,
     height: 1.15,
   );
 
   static TextStyle subtitle(BnaShowcaseColors colors) => TextStyle(
     fontSize: 19,
-    fontWeight: FontWeight.w600,
+    fontWeight: FontWeight.w500,
     color: colors.text,
     height: 1.2,
   );
@@ -120,7 +120,7 @@ class BnaShowcaseTextStyles {
 
   static TextStyle overline(BnaShowcaseColors colors) => TextStyle(
     fontSize: 13,
-    fontWeight: FontWeight.w600,
+    fontWeight: FontWeight.w500,
     color: colors.textMuted,
     height: 1.2,
     letterSpacing: 0.2,

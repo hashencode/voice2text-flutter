@@ -35,6 +35,7 @@ class BnaButton extends StatefulWidget {
     this.gradient,
     this.contentPadding,
     this.textStyle,
+    this.minFontSize,
   });
 
   final Widget child;
@@ -53,14 +54,13 @@ class BnaButton extends StatefulWidget {
   final Gradient? gradient;
   final EdgeInsetsGeometry? contentPadding;
   final TextStyle? textStyle;
+  final double? minFontSize;
 
   @override
   State<BnaButton> createState() => _BnaButtonState();
 }
 
 class _BnaButtonState extends State<BnaButton> {
-  bool _pressed = false;
-
   @override
   Widget build(BuildContext context) {
     final BnaShowcaseColors colors = BnaShowcaseColors.of(context);
@@ -101,120 +101,153 @@ class _BnaButtonState extends State<BnaButton> {
               ? 0
               : BnaShowcaseMetrics.corners),
     );
+    final TextStyle labelStyle = TextStyle(
+      fontSize: BnaShowcaseMetrics.fontSize,
+      fontWeight: FontWeight.w500,
+      color: style.foregroundColor,
+      decoration: widget.variant == BnaButtonVariant.link
+          ? TextDecoration.underline
+          : TextDecoration.none,
+    ).merge(widget.textStyle);
 
     return Opacity(
-      opacity: widget.disabled
-          ? 0.6
-          : (!widget.animation && _pressed ? 0.8 : 1),
-      child: AnimatedScale(
-        scale: widget.animation && _pressed ? 1.04 : 1,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutBack,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: widget.gradient == null ? style.backgroundColor : null,
-            gradient: widget.gradient,
+      opacity: widget.disabled ? 0.6 : 1,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: widget.gradient == null ? style.backgroundColor : null,
+          gradient: widget.gradient,
+          borderRadius: borderRadius,
+          border: style.borderColor == null
+              ? null
+              : Border.all(color: style.borderColor!, width: style.borderWidth),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
             borderRadius: borderRadius,
-            border: style.borderColor == null
-                ? null
-                : Border.all(
-                    color: style.borderColor!,
-                    width: style.borderWidth,
-                  ),
-          ),
-          child: Stack(
-            children: <Widget>[
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: AnimatedOpacity(
-                    opacity: widget.animation && _pressed ? 0.08 : 0,
-                    duration: const Duration(milliseconds: 120),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: borderRadius,
-                      ),
+            splashFactory: NoSplash.splashFactory,
+            overlayColor: const WidgetStatePropertyAll<Color>(
+              Colors.transparent,
+            ),
+            onTap: canInteract ? _handleTap : null,
+            child: ConstrainedBox(
+              constraints: widget.size == BnaButtonSize.icon
+                  ? BoxConstraints.tightFor(width: height, height: height)
+                  : BoxConstraints(
+                      minHeight: widget.variant == BnaButtonVariant.link
+                          ? 0
+                          : height,
                     ),
-                  ),
-                ),
-              ),
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: borderRadius,
-                  splashFactory: NoSplash.splashFactory,
-                  overlayColor: const WidgetStatePropertyAll<Color>(
-                    Colors.transparent,
-                  ),
-                  onTap: canInteract ? _handleTap : null,
-                  onHighlightChanged: (bool value) {
-                    if (_pressed != value) {
-                      setState(() {
-                        _pressed = value;
-                      });
-                    }
-                  },
-                  child: ConstrainedBox(
-                    constraints: widget.size == BnaButtonSize.icon
-                        ? BoxConstraints.tightFor(width: height, height: height)
-                        : BoxConstraints(
-                            minHeight: widget.variant == BnaButtonVariant.link
-                                ? 0
-                                : height,
-                          ),
-                    child: Padding(
-                      padding: padding,
-                      child: DefaultTextStyle(
-                        style: TextStyle(
-                          fontSize: BnaShowcaseMetrics.fontSize,
-                          fontWeight: FontWeight.w500,
+              child: Padding(
+                padding: padding,
+                child: LayoutBuilder(
+                  builder: (BuildContext context, BoxConstraints constraints) {
+                    final Widget content = _buildContent(
+                      style: style,
+                      labelStyle: labelStyle,
+                      iconSize: iconSize,
+                      isIconOnly: isIconOnly,
+                      maxWidth: constraints.maxWidth,
+                    );
+
+                    return DefaultTextStyle(
+                      style: labelStyle,
+                      child: IconTheme(
+                        data: IconThemeData(
                           color: style.foregroundColor,
-                          decoration: widget.variant == BnaButtonVariant.link
-                              ? TextDecoration.underline
-                              : TextDecoration.none,
-                        ).merge(widget.textStyle),
-                        child: IconTheme(
-                          data: IconThemeData(
-                            color: style.foregroundColor,
-                            size: iconSize,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: <Widget>[
-                              if (widget.loading)
-                                SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2.2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      style.foregroundColor,
-                                    ),
-                                  ),
-                                )
-                              else if (isIconOnly)
-                                Icon(widget.icon)
-                              else ...<Widget>[
-                                if (widget.icon != null) ...<Widget>[
-                                  Icon(widget.icon),
-                                  const SizedBox(width: 8),
-                                ],
-                                Flexible(child: widget.child),
-                              ],
-                            ],
-                          ),
+                          size: iconSize,
                         ),
+                        child: widget.variant == BnaButtonVariant.link
+                            ? content
+                            : Center(child: content),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildContent({
+    required _ResolvedButtonStyle style,
+    required TextStyle labelStyle,
+    required double iconSize,
+    required bool isIconOnly,
+    required double maxWidth,
+  }) {
+    if (widget.loading) {
+      return SizedBox(
+        width: 18,
+        height: 18,
+        child: CircularProgressIndicator(
+          strokeWidth: 2.2,
+          valueColor: AlwaysStoppedAnimation<Color>(style.foregroundColor),
+        ),
+      );
+    }
+
+    if (isIconOnly) {
+      return Icon(widget.icon, size: iconSize);
+    }
+
+    final Widget label = _buildLabel(
+      labelStyle: labelStyle,
+      maxWidth: widget.icon == null
+          ? maxWidth
+          : (maxWidth - iconSize - 8).clamp(0.0, double.infinity).toDouble(),
+    );
+
+    if (widget.icon != null) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(widget.icon, size: iconSize),
+          const SizedBox(width: 8),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: (maxWidth - iconSize - 8)
+                  .clamp(0.0, double.infinity)
+                  .toDouble(),
+            ),
+            child: label,
+          ),
+        ],
+      );
+    }
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: label,
+    );
+  }
+
+  Widget _buildLabel({
+    required TextStyle labelStyle,
+    required double maxWidth,
+  }) {
+    if (widget.child is! Text) {
+      return widget.child;
+    }
+
+    return _AutoSizingButtonText(
+      source: widget.child as Text,
+      style: labelStyle,
+      minFontSize: widget.minFontSize ?? _defaultMinFontSize(),
+      maxWidth: maxWidth,
+    );
+  }
+
+  double _defaultMinFontSize() {
+    return switch (widget.size) {
+      BnaButtonSize.sm => 13,
+      BnaButtonSize.lg => 15,
+      BnaButtonSize.icon => BnaShowcaseMetrics.fontSize,
+      BnaButtonSize.defaultSize => 14,
+    };
   }
 
   void _handleTap() {
@@ -276,6 +309,192 @@ class _BnaButtonState extends State<BnaButton> {
           borderWidth: widget.borderWidth ?? 1,
         );
     }
+  }
+}
+
+class _AutoSizingButtonText extends StatelessWidget {
+  static const double _wrappedLineHeight = 1.05;
+
+  const _AutoSizingButtonText({
+    required this.source,
+    required this.style,
+    required this.minFontSize,
+    required this.maxWidth,
+  });
+
+  final Text source;
+  final TextStyle style;
+  final double minFontSize;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final double baseFontSize = style.fontSize ?? BnaShowcaseMetrics.fontSize;
+    final double minimum = minFontSize.clamp(1, baseFontSize).toDouble();
+    final InlineSpan span = _buildSpan(style);
+
+    if (!maxWidth.isFinite || maxWidth <= 0) {
+      return _renderText(
+        source,
+        span,
+        style.copyWith(fontSize: baseFontSize),
+        maxLines: 1,
+      );
+    }
+
+    final double fittedFontSize = _resolveFontSize(
+      context: context,
+      span: span,
+      baseStyle: style,
+      minFontSize: minimum,
+      maxWidth: maxWidth,
+    );
+    final bool fitsSingleLine = _fitsWidth(
+      context: context,
+      span: span,
+      style: style.copyWith(fontSize: fittedFontSize),
+      maxWidth: maxWidth,
+    );
+
+    if (fitsSingleLine) {
+      return _renderText(
+        source,
+        span,
+        style.copyWith(fontSize: fittedFontSize),
+        maxLines: 1,
+      );
+    }
+
+    return _renderText(
+      source,
+      span,
+      style.copyWith(fontSize: minimum, height: _wrappedLineHeight),
+      maxLines: null,
+    );
+  }
+
+  InlineSpan _buildSpan(TextStyle effectiveStyle) {
+    if (source.textSpan != null) {
+      return TextSpan(
+        style: effectiveStyle,
+        children: <InlineSpan>[source.textSpan!],
+      );
+    }
+
+    return TextSpan(text: source.data ?? '', style: effectiveStyle);
+  }
+
+  double _resolveFontSize({
+    required BuildContext context,
+    required InlineSpan span,
+    required TextStyle baseStyle,
+    required double minFontSize,
+    required double maxWidth,
+  }) {
+    final double baseFontSize =
+        baseStyle.fontSize ?? BnaShowcaseMetrics.fontSize;
+
+    if (_fitsWidth(
+      context: context,
+      span: span,
+      style: baseStyle.copyWith(fontSize: baseFontSize),
+      maxWidth: maxWidth,
+    )) {
+      return baseFontSize;
+    }
+
+    for (double size = baseFontSize - 0.5; size >= minFontSize; size -= 0.5) {
+      if (_fitsWidth(
+        context: context,
+        span: span,
+        style: baseStyle.copyWith(fontSize: size),
+        maxWidth: maxWidth,
+      )) {
+        return size;
+      }
+    }
+
+    return minFontSize;
+  }
+
+  bool _fitsWidth({
+    required BuildContext context,
+    required InlineSpan span,
+    required TextStyle style,
+    required double maxWidth,
+  }) {
+    final TextPainter painter = TextPainter(
+      text: _restyleSpan(span, style),
+      textDirection: Directionality.of(context),
+      textAlign: source.textAlign ?? TextAlign.center,
+      maxLines: 1,
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout(maxWidth: maxWidth);
+
+    return !painter.didExceedMaxLines;
+  }
+
+  InlineSpan _restyleSpan(InlineSpan span, TextStyle style) {
+    if (span is TextSpan) {
+      return TextSpan(
+        text: span.text,
+        children: span.children,
+        recognizer: span.recognizer,
+        semanticsLabel: span.semanticsLabel,
+        locale: span.locale,
+        spellOut: span.spellOut,
+        mouseCursor: span.mouseCursor,
+        onEnter: span.onEnter,
+        onExit: span.onExit,
+        style: style.merge(span.style),
+      );
+    }
+
+    return TextSpan(style: style, children: <InlineSpan>[span]);
+  }
+
+  Widget _renderText(
+    Text source,
+    InlineSpan span,
+    TextStyle style, {
+    required int? maxLines,
+  }) {
+    if (source.textSpan != null) {
+      return Text.rich(
+        _restyleSpan(span, style),
+        key: source.key,
+        textAlign: source.textAlign ?? TextAlign.center,
+        textDirection: source.textDirection,
+        locale: source.locale,
+        softWrap: maxLines != 1,
+        overflow: source.overflow,
+        textScaler: source.textScaler,
+        maxLines: maxLines,
+        semanticsLabel: source.semanticsLabel,
+        strutStyle: source.strutStyle,
+        textWidthBasis: source.textWidthBasis,
+        textHeightBehavior: source.textHeightBehavior,
+        selectionColor: source.selectionColor,
+      );
+    }
+
+    return Text(
+      source.data ?? '',
+      key: source.key,
+      style: style.merge(source.style),
+      textAlign: source.textAlign ?? TextAlign.center,
+      textDirection: source.textDirection,
+      locale: source.locale,
+      softWrap: maxLines != 1,
+      overflow: source.overflow,
+      textScaler: source.textScaler,
+      maxLines: maxLines,
+      semanticsLabel: source.semanticsLabel,
+      strutStyle: source.strutStyle,
+      textWidthBasis: source.textWidthBasis,
+      textHeightBehavior: source.textHeightBehavior,
+      selectionColor: source.selectionColor,
+    );
   }
 }
 

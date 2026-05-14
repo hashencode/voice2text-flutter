@@ -6,8 +6,10 @@ import '../data/bna_components.dart';
 import '../widgets/bna_input.dart';
 import '../widgets/bna_showcase_shell.dart';
 import 'button_component_page.dart';
+import 'card_component_page.dart';
 import 'component_placeholder_page.dart';
 import 'input_component_page.dart';
+import 'text_component_page.dart';
 
 class BnaUiLibraryPage extends StatefulWidget {
   const BnaUiLibraryPage({super.key});
@@ -142,7 +144,7 @@ class _BnaUiLibraryPageState extends State<BnaUiLibraryPage> {
                                     component.name,
                                     style: BnaShowcaseTextStyles.body(
                                       colors,
-                                    ).copyWith(fontWeight: FontWeight.w600),
+                                    ).copyWith(fontWeight: FontWeight.w500),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
@@ -203,7 +205,9 @@ class _BnaUiLibraryPageState extends State<BnaUiLibraryPage> {
   void _openComponent(BnaComponentDefinition component) {
     final Widget page = switch (component.slug) {
       'button' => const BnaButtonComponentPage(),
+      'card' => const BnaCardComponentPage(),
       'input' => const BnaInputComponentPage(),
+      'text' => const BnaTextComponentPage(),
       _ => BnaComponentPlaceholderPage(component: component),
     };
 

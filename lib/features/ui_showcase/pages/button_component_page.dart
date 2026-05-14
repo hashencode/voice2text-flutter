@@ -230,6 +230,32 @@ class BnaButtonComponentPage extends StatelessWidget {
           ),
         ),
         BnaExampleSection(
+          title: 'Long Labels',
+          description:
+              'Buttons shrink text first to preserve a single line, then wrap only after reaching the minimum readable size.',
+          surface: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              SizedBox(
+                width: 220,
+                child: BnaButton(
+                  onPressed: () => _onPress(context, 'Shrink to fit'),
+                  child: const Text('Continue to account settings'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: 120,
+                child: BnaButton(
+                  onPressed: () => _onPress(context, 'Wrap at min size'),
+                  child: const Text('Continue to checkout'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        BnaExampleSection(
           title: 'Custom Styling',
           surface: false,
           child: Wrap(
@@ -240,7 +266,7 @@ class BnaButtonComponentPage extends StatelessWidget {
                 backgroundColor: const Color(0xFF8B5CF6),
                 borderRadius: 12,
                 foregroundColor: Colors.white,
-                textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                textStyle: const TextStyle(fontWeight: FontWeight.w500),
                 onPressed: () => _onPress(context, 'Custom purple'),
                 child: const Text('Custom Purple'),
               ),
@@ -250,7 +276,7 @@ class BnaButtonComponentPage extends StatelessWidget {
                 borderWidth: 2,
                 borderRadius: 20,
                 foregroundColor: const Color(0xFFF59E0B),
-                textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                textStyle: const TextStyle(fontWeight: FontWeight.w500),
                 onPressed: () => _onPress(context, 'Custom orange'),
                 child: const Text('Custom Orange'),
               ),
@@ -262,44 +288,9 @@ class BnaButtonComponentPage extends StatelessWidget {
                 backgroundColor: Colors.transparent,
                 foregroundColor: Colors.white,
                 borderRadius: 12,
-                textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                textStyle: const TextStyle(fontWeight: FontWeight.w500),
                 onPressed: () => _onPress(context, 'Gradient style'),
                 child: const Text('Gradient Style'),
-              ),
-            ],
-          ),
-        ),
-        BnaExampleSection(
-          title: 'Animation Control',
-          surface: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const Text(
-                'With Animation (default)',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF71717A),
-                ),
-              ),
-              const SizedBox(height: 8),
-              BnaButton(
-                onPressed: () => _onPress(context, 'Animated button'),
-                child: const Text('Animated Button'),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Without Animation',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF71717A),
-                ),
-              ),
-              const SizedBox(height: 8),
-              BnaButton(
-                animation: false,
-                onPressed: () => _onPress(context, 'Static button'),
-                child: const Text('Static Button'),
               ),
             ],
           ),

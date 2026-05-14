@@ -205,7 +205,7 @@ class BnaStatusPill extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 13,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w500,
             color: foregroundColor,
             height: 1,
           ),
