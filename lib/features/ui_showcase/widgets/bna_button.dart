@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../bna_theme.dart';
+import 'bna_spinner.dart';
 
 enum BnaButtonVariant {
   defaultStyle,
@@ -180,13 +181,9 @@ class _BnaButtonState extends State<BnaButton> {
     required double maxWidth,
   }) {
     if (widget.loading) {
-      return SizedBox(
-        width: 18,
-        height: 18,
-        child: CircularProgressIndicator(
-          strokeWidth: 2.2,
-          valueColor: AlwaysStoppedAnimation<Color>(style.foregroundColor),
-        ),
+      return BnaButtonSpinner(
+        size: _spinnerSizeForButton(widget.size),
+        color: style.foregroundColor,
       );
     }
 
@@ -247,6 +244,15 @@ class _BnaButtonState extends State<BnaButton> {
       BnaButtonSize.lg => 15,
       BnaButtonSize.icon => BnaShowcaseMetrics.fontSize,
       BnaButtonSize.defaultSize => 14,
+    };
+  }
+
+  BnaSpinnerSize _spinnerSizeForButton(BnaButtonSize size) {
+    return switch (size) {
+      BnaButtonSize.sm => BnaSpinnerSize.sm,
+      BnaButtonSize.lg => BnaSpinnerSize.lg,
+      BnaButtonSize.icon => BnaSpinnerSize.icon,
+      BnaButtonSize.defaultSize => BnaSpinnerSize.defaultSize,
     };
   }
 

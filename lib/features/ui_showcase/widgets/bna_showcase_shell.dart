@@ -145,6 +145,7 @@ class BnaExampleSection extends StatelessWidget {
     this.footer,
     this.surface = true,
     this.surfacePadding = const EdgeInsets.all(16),
+    this.showDivider = false,
   });
 
   final String title;
@@ -153,6 +154,7 @@ class BnaExampleSection extends StatelessWidget {
   final Widget? footer;
   final bool surface;
   final EdgeInsetsGeometry surfacePadding;
+  final bool showDivider;
 
   @override
   Widget build(BuildContext context) {
@@ -174,6 +176,10 @@ class BnaExampleSection extends StatelessWidget {
           else
             child,
           if (footer != null) ...<Widget>[const SizedBox(height: 8), footer!],
+          if (showDivider) ...<Widget>[
+            const SizedBox(height: 16),
+            Divider(color: colors.border, height: 1),
+          ],
         ],
       ),
     );

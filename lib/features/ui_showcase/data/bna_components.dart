@@ -281,7 +281,7 @@ const List<BnaComponentDefinition> bnaComponents = <BnaComponentDefinition>[
     name: 'Spinner',
     slug: 'spinner',
     description: 'Loading indicators and overlays.',
-    status: BnaComponentStatus.planned,
+    status: BnaComponentStatus.migrated,
   ),
   BnaComponentDefinition(
     name: 'Switch',

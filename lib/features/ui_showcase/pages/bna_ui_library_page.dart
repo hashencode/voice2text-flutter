@@ -9,6 +9,7 @@ import 'button_component_page.dart';
 import 'card_component_page.dart';
 import 'component_placeholder_page.dart';
 import 'input_component_page.dart';
+import 'spinner_component_page.dart';
 import 'text_component_page.dart';
 
 class BnaUiLibraryPage extends StatefulWidget {
@@ -207,6 +208,7 @@ class _BnaUiLibraryPageState extends State<BnaUiLibraryPage> {
       'button' => const BnaButtonComponentPage(),
       'card' => const BnaCardComponentPage(),
       'input' => const BnaInputComponentPage(),
+      'spinner' => const BnaSpinnerComponentPage(),
       'text' => const BnaTextComponentPage(),
       _ => BnaComponentPlaceholderPage(component: component),
     };
