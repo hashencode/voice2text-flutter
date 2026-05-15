@@ -23,6 +23,8 @@ class BnaInput extends StatefulWidget {
     this.placeholder,
     this.keyboardType,
     this.obscureText = false,
+    this.onSubmitted,
+    this.textInputAction,
   });
 
   final String? label;
@@ -39,6 +41,8 @@ class BnaInput extends StatefulWidget {
   final String? placeholder;
   final TextInputType? keyboardType;
   final bool obscureText;
+  final ValueChanged<String>? onSubmitted;
+  final TextInputAction? textInputAction;
 
   @override
   State<BnaInput> createState() => _BnaInputState();
@@ -156,7 +160,9 @@ class _BnaInputState extends State<BnaInput> {
       controller: widget.controller,
       focusNode: _focusNode,
       onChanged: widget.onChanged,
+      onSubmitted: widget.onSubmitted,
       keyboardType: widget.keyboardType,
+      textInputAction: widget.textInputAction,
       obscureText: widget.obscureText,
       enabled: !widget.disabled,
       maxLines: multiline ? widget.rows : 1,
@@ -262,6 +268,8 @@ class BnaGroupedInputItem extends StatefulWidget {
     this.placeholder,
     this.keyboardType,
     this.obscureText = false,
+    this.onSubmitted,
+    this.textInputAction,
   });
 
   final String? label;
@@ -276,6 +284,8 @@ class BnaGroupedInputItem extends StatefulWidget {
   final String? placeholder;
   final TextInputType? keyboardType;
   final bool obscureText;
+  final ValueChanged<String>? onSubmitted;
+  final TextInputAction? textInputAction;
 
   @override
   State<BnaGroupedInputItem> createState() => _BnaGroupedInputItemState();
@@ -342,7 +352,9 @@ class _BnaGroupedInputItemState extends State<BnaGroupedInputItem> {
       controller: widget.controller,
       focusNode: _focusNode,
       onChanged: widget.onChanged,
+      onSubmitted: widget.onSubmitted,
       keyboardType: widget.keyboardType,
+      textInputAction: widget.textInputAction,
       obscureText: widget.obscureText,
       enabled: !widget.disabled,
       maxLines: multiline ? widget.rows : 1,

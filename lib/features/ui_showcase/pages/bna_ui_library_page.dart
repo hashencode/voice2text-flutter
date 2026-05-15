@@ -5,10 +5,12 @@ import '../bna_theme.dart';
 import '../data/bna_components.dart';
 import '../widgets/bna_input.dart';
 import '../widgets/bna_showcase_shell.dart';
+import 'avoid_keyboard_component_page.dart';
 import 'button_component_page.dart';
 import 'card_component_page.dart';
 import 'component_placeholder_page.dart';
 import 'input_component_page.dart';
+import 'input_otp_component_page.dart';
 import 'icon_component_page.dart';
 import 'link_component_page.dart';
 import 'spinner_component_page.dart';
@@ -209,8 +211,10 @@ class _BnaUiLibraryPageState extends State<BnaUiLibraryPage> {
     final Widget page = switch (component.slug) {
       'button' => const BnaButtonComponentPage(),
       'card' => const BnaCardComponentPage(),
+      'avoid-keyboard' => const BnaAvoidKeyboardComponentPage(),
       'icon' => const BnaIconComponentPage(),
       'input' => const BnaInputComponentPage(),
+      'input-otp' => const BnaInputOtpComponentPage(),
       'link' => const BnaLinkComponentPage(),
       'spinner' => const BnaSpinnerComponentPage(),
       'text' => const BnaTextComponentPage(),

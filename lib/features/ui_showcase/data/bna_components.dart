@@ -69,7 +69,7 @@ const List<BnaComponentDefinition> bnaComponents = <BnaComponentDefinition>[
     name: 'AvoidKeyboard',
     slug: 'avoid-keyboard',
     description: 'Keyboard-safe layout helpers.',
-    status: BnaComponentStatus.planned,
+    status: BnaComponentStatus.migrated,
   ),
   BnaComponentDefinition(
     name: 'Badge',
@@ -185,7 +185,7 @@ const List<BnaComponentDefinition> bnaComponents = <BnaComponentDefinition>[
     name: 'Input OTP',
     slug: 'input-otp',
     description: 'One-time password entry.',
-    status: BnaComponentStatus.planned,
+    status: BnaComponentStatus.migrated,
   ),
   BnaComponentDefinition(
     name: 'Link',
