@@ -14,6 +14,7 @@ import 'input_otp_component_page.dart';
 import 'icon_component_page.dart';
 import 'link_component_page.dart';
 import 'spinner_component_page.dart';
+import 'tabs_component_page.dart';
 import 'text_component_page.dart';
 
 class BnaUiLibraryPage extends StatefulWidget {
@@ -217,6 +218,7 @@ class _BnaUiLibraryPageState extends State<BnaUiLibraryPage> {
       'input-otp' => const BnaInputOtpComponentPage(),
       'link' => const BnaLinkComponentPage(),
       'spinner' => const BnaSpinnerComponentPage(),
+      'tabs' => const BnaTabsComponentPage(),
       'text' => const BnaTextComponentPage(),
       _ => BnaComponentPlaceholderPage(component: component),
     };

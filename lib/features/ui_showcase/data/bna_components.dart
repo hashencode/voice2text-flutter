@@ -242,12 +242,6 @@ const List<BnaComponentDefinition> bnaComponents = <BnaComponentDefinition>[
     status: BnaComponentStatus.planned,
   ),
   BnaComponentDefinition(
-    name: 'ScrollView',
-    slug: 'scroll-view',
-    description: 'Scrollable content helpers.',
-    status: BnaComponentStatus.planned,
-  ),
-  BnaComponentDefinition(
     name: 'SearchBar',
     slug: 'searchbar',
     description: 'Search field patterns.',
@@ -299,7 +293,7 @@ const List<BnaComponentDefinition> bnaComponents = <BnaComponentDefinition>[
     name: 'Tabs',
     slug: 'tabs',
     description: 'Segmented and tabbed navigation.',
-    status: BnaComponentStatus.planned,
+    status: BnaComponentStatus.migrated,
   ),
   BnaComponentDefinition(
     name: 'Text',

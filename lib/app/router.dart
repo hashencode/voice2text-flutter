@@ -8,6 +8,7 @@ import '../features/transcription/transcription_page.dart';
 import '../features/ui_showcase/pages/avoid_keyboard_component_page.dart';
 import '../features/ui_showcase/pages/bna_ui_library_page.dart';
 import '../features/ui_showcase/pages/input_otp_component_page.dart';
+import '../features/ui_showcase/pages/tabs_component_page.dart';
 
 class AppRoutes {
   static const String home = '/';
@@ -18,6 +19,7 @@ class AppRoutes {
   static const String uiShowcase = '/ui-showcase';
   static const String uiShowcaseAvoidKeyboard = '/ui-showcase/avoid-keyboard';
   static const String uiShowcaseInputOtp = '/ui-showcase/input-otp';
+  static const String uiShowcaseTabs = '/ui-showcase/tabs';
 
   static Map<String, WidgetBuilder> get map => <String, WidgetBuilder>{
     home: (_) => const HomePage(),
@@ -28,5 +30,6 @@ class AppRoutes {
     uiShowcase: (_) => const BnaUiLibraryPage(),
     uiShowcaseAvoidKeyboard: (_) => const BnaAvoidKeyboardComponentPage(),
     uiShowcaseInputOtp: (_) => const BnaInputOtpComponentPage(),
+    uiShowcaseTabs: (_) => const BnaTabsComponentPage(),
   };
 }
