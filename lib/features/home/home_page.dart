@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 
-import '../../app/router.dart';
 import '../../app/theme/theme_mode_controller.dart';
 import 'model/folder_entity.dart';
 import 'repository/folders_repository.dart';
@@ -1005,16 +1004,6 @@ class _HomePageState extends State<HomePage> {
                       _createFolder();
                     },
                   ),
-                  if (!_isSelectionMode)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                      child: _UiShowcaseEntryCard(
-                        palette: palette,
-                        onTap: () {
-                          Navigator.of(context).pushNamed(AppRoutes.uiShowcase);
-                        },
-                      ),
-                    ),
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
@@ -1163,83 +1152,6 @@ class _HomeHeader extends StatelessWidget {
           onPressed: onTheme,
         ),
       ],
-    );
-  }
-}
-
-class _UiShowcaseEntryCard extends StatelessWidget {
-  const _UiShowcaseEntryCard({required this.palette, required this.onTap});
-
-  final HomePagePalette palette;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Ink(
-          decoration: BoxDecoration(
-            color: palette.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: palette.divider),
-            boxShadow: <BoxShadow>[
-              BoxShadow(
-                color: palette.fabShadow,
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            child: Row(
-              children: <Widget>[
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: palette.surfaceActive,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(
-                    LucideIcons.package300,
-                    color: palette.text,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        'BNA UI 组件库',
-                        style: HomePageTextStyles.rowTitle(
-                          palette,
-                        ).copyWith(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '查看 Flutter 迁移目录与实时交互 Demo',
-                        style: HomePageTextStyles.meta(palette),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Icon(
-                  LucideIcons.chevronRight300,
-                  color: palette.mutedText,
-                  size: 18,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
