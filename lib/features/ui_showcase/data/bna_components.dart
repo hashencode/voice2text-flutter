@@ -42,24 +42,6 @@ const List<BnaComponentDefinition> bnaComponents = <BnaComponentDefinition>[
     status: BnaComponentStatus.planned,
   ),
   BnaComponentDefinition(
-    name: 'Audio Player',
-    slug: 'audio-player',
-    description: 'Playback controls and progress UI.',
-    status: BnaComponentStatus.planned,
-  ),
-  BnaComponentDefinition(
-    name: 'Audio Recorder',
-    slug: 'audio-recorder',
-    description: 'Recording interface and state controls.',
-    status: BnaComponentStatus.planned,
-  ),
-  BnaComponentDefinition(
-    name: 'Audio Waveform',
-    slug: 'audio-waveform',
-    description: 'Waveform visualizations for audio.',
-    status: BnaComponentStatus.planned,
-  ),
-  BnaComponentDefinition(
     name: 'Avatar',
     slug: 'avatar',
     description: 'Profile images and status chips.',
@@ -200,21 +182,9 @@ const List<BnaComponentDefinition> bnaComponents = <BnaComponentDefinition>[
     status: BnaComponentStatus.planned,
   ),
   BnaComponentDefinition(
-    name: 'Mode Toggle',
-    slug: 'mode-toggle',
-    description: 'Light and dark theme toggle.',
-    status: BnaComponentStatus.planned,
-  ),
-  BnaComponentDefinition(
     name: 'Onboarding',
     slug: 'onboarding',
     description: 'Multi-step intro screens.',
-    status: BnaComponentStatus.planned,
-  ),
-  BnaComponentDefinition(
-    name: 'ParallaxScrollView',
-    slug: 'parallax-scrollview',
-    description: 'Parallax header scrolling.',
     status: BnaComponentStatus.planned,
   ),
   BnaComponentDefinition(
@@ -317,13 +287,7 @@ const List<BnaComponentDefinition> bnaComponents = <BnaComponentDefinition>[
     name: 'Video',
     slug: 'video',
     description: 'Video player surfaces.',
-    status: BnaComponentStatus.planned,
-  ),
-  BnaComponentDefinition(
-    name: 'View',
-    slug: 'view',
-    description: 'Base layout wrapper.',
-    status: BnaComponentStatus.planned,
+    status: BnaComponentStatus.migrated,
   ),
 ];
 

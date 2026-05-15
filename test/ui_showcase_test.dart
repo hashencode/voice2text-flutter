@@ -7,6 +7,7 @@ import 'package:voice2text_flutter/features/ui_showcase/pages/button_component_p
 import 'package:voice2text_flutter/features/ui_showcase/pages/card_component_page.dart';
 import 'package:voice2text_flutter/features/ui_showcase/pages/input_component_page.dart';
 import 'package:voice2text_flutter/features/ui_showcase/pages/link_component_page.dart';
+import 'package:voice2text_flutter/features/ui_showcase/data/bna_components.dart';
 import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_badge.dart';
 import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_button.dart';
 import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_card.dart';
@@ -15,6 +16,7 @@ import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_link.dart';
 import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_separator.dart';
 import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_showcase_shell.dart';
 import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_text.dart';
+import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_video.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
 class _CapturingUrlLauncher extends UrlLauncherPlatform {
@@ -479,5 +481,39 @@ void main() {
 
     expect(launcher.lastUrl, 'tel:+1234567890');
     expect(launcher.lastMode, PreferredLaunchMode.externalApplication);
+  });
+
+  test('video helpers format time and captions for the custom player', () {
+    expect(formatBnaVideoTime(const Duration(seconds: 5)), '0:05');
+    expect(formatBnaVideoTime(const Duration(minutes: 3, seconds: 9)), '3:09');
+    expect(
+      formatBnaVideoTime(const Duration(hours: 1, minutes: 2, seconds: 3)),
+      '1:02:03',
+    );
+
+    final String webVtt = buildBnaWebVtt(const <BnaVideoCaptionCue>[
+      BnaVideoCaptionCue(
+        start: Duration.zero,
+        end: Duration(seconds: 2),
+        text: 'Hello world',
+      ),
+    ]);
+
+    expect(webVtt, startsWith('WEBVTT'));
+    expect(webVtt, contains('00:00:00.000 --> 00:00:02.000'));
+    expect(webVtt, contains('Hello world'));
+  });
+
+  test('component list removes skipped items and exposes migrated video', () {
+    expect(findBnaComponent('audio-player'), isNull);
+    expect(findBnaComponent('audio-recorder'), isNull);
+    expect(findBnaComponent('audio-waveform'), isNull);
+    expect(findBnaComponent('mode-toggle'), isNull);
+    expect(findBnaComponent('parallax-scrollview'), isNull);
+    expect(findBnaComponent('view'), isNull);
+
+    final BnaComponentDefinition? video = findBnaComponent('video');
+    expect(video, isNotNull);
+    expect(video?.status, BnaComponentStatus.migrated);
   });
 }

@@ -11,6 +11,7 @@ import '../features/ui_showcase/pages/bna_ui_library_page.dart';
 import '../features/ui_showcase/pages/input_otp_component_page.dart';
 import '../features/ui_showcase/pages/separator_component_page.dart';
 import '../features/ui_showcase/pages/tabs_component_page.dart';
+import '../features/ui_showcase/pages/video_component_page.dart';
 
 class AppRoutes {
   static const String home = '/';
@@ -24,6 +25,7 @@ class AppRoutes {
   static const String uiShowcaseInputOtp = '/ui-showcase/input-otp';
   static const String uiShowcaseSeparator = '/ui-showcase/separator';
   static const String uiShowcaseTabs = '/ui-showcase/tabs';
+  static const String uiShowcaseVideo = '/ui-showcase/video';
 
   static Map<String, WidgetBuilder> get map => <String, WidgetBuilder>{
     home: (_) => const HomePage(),
@@ -37,5 +39,6 @@ class AppRoutes {
     uiShowcaseInputOtp: (_) => const BnaInputOtpComponentPage(),
     uiShowcaseSeparator: (_) => const BnaSeparatorComponentPage(),
     uiShowcaseTabs: (_) => const BnaTabsComponentPage(),
+    uiShowcaseVideo: (_) => const BnaVideoComponentPage(),
   };
 }

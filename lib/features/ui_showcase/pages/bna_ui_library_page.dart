@@ -18,6 +18,7 @@ import 'separator_component_page.dart';
 import 'spinner_component_page.dart';
 import 'tabs_component_page.dart';
 import 'text_component_page.dart';
+import 'video_component_page.dart';
 
 class BnaUiLibraryPage extends StatefulWidget {
   const BnaUiLibraryPage({super.key});
@@ -202,7 +203,7 @@ class _BnaUiLibraryPageState extends State<BnaUiLibraryPage> {
               'Phase 1: Text, Card, Badge, Spinner, Separator. These are low-risk primitives that unlock most visual demos.',
               'Phase 2: Tabs, Accordion, Sheet, Popover, BottomSheet. This establishes navigation and overlay patterns.',
               'Phase 3: Checkbox, Radio, Switch, Picker, Date Picker, Input OTP. This completes the form-control family.',
-              'Phase 4: Audio, Camera, Gallery, MediaPicker, charts. These need native capability work and should come last.',
+              'Phase 4: Video, Camera, Gallery, MediaPicker, charts. These need native capability work and should come last.',
             ],
           ),
         ),
@@ -224,6 +225,7 @@ class _BnaUiLibraryPageState extends State<BnaUiLibraryPage> {
       'spinner' => const BnaSpinnerComponentPage(),
       'tabs' => const BnaTabsComponentPage(),
       'text' => const BnaTextComponentPage(),
+      'video' => const BnaVideoComponentPage(),
       _ => BnaComponentPlaceholderPage(component: component),
     };
 

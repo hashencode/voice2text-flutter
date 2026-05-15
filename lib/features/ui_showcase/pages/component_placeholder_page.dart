@@ -52,7 +52,7 @@ class BnaComponentPlaceholderPage extends StatelessWidget {
               '先补齐基础层：Text、Card、Badge、Spinner、Separator。',
               '再迁移布局与容器：Tabs、Accordion、Sheet、Popover、BottomSheet。',
               '然后处理表单控件：Checkbox、Radio、Switch、Picker、Date Picker、Input OTP。',
-              '最后进入强平台依赖组件：Camera、Audio Recorder、Audio Player、Gallery、MediaPicker。',
+              '最后进入强平台依赖组件：Video、Camera、Gallery、MediaPicker。',
             ],
           ),
         ),
