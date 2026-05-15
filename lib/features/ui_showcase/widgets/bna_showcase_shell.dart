@@ -99,6 +99,68 @@ class BnaShowcaseScaffold extends StatelessWidget {
   }
 }
 
+class BnaCompareScaffold extends StatelessWidget {
+  const BnaCompareScaffold({
+    super.key,
+    required this.title,
+    required this.description,
+    required this.children,
+  });
+
+  final String title;
+  final String description;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final BnaShowcaseColors colors = BnaShowcaseColors.of(context);
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 40, 16, 120),
+          children: <Widget>[
+            Text(title, style: BnaShowcaseTextStyles.heading(colors)),
+            const SizedBox(height: 8),
+            Text(description, style: BnaShowcaseTextStyles.caption(colors)),
+            const SizedBox(height: 28),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class BnaCompareSection extends StatelessWidget {
+  const BnaCompareSection({
+    super.key,
+    required this.title,
+    required this.child,
+  });
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final BnaShowcaseColors colors = BnaShowcaseColors.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(title, style: BnaShowcaseTextStyles.title(colors)),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
 class BnaSurfaceCard extends StatelessWidget {
   const BnaSurfaceCard({
     super.key,

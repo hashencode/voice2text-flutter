@@ -6,6 +6,7 @@ import '../data/bna_components.dart';
 import '../widgets/bna_input.dart';
 import '../widgets/bna_showcase_shell.dart';
 import 'avoid_keyboard_component_page.dart';
+import 'badge_component_page.dart';
 import 'button_component_page.dart';
 import 'card_component_page.dart';
 import 'component_placeholder_page.dart';
@@ -13,6 +14,7 @@ import 'input_component_page.dart';
 import 'input_otp_component_page.dart';
 import 'icon_component_page.dart';
 import 'link_component_page.dart';
+import 'separator_component_page.dart';
 import 'spinner_component_page.dart';
 import 'tabs_component_page.dart';
 import 'text_component_page.dart';
@@ -210,6 +212,7 @@ class _BnaUiLibraryPageState extends State<BnaUiLibraryPage> {
 
   void _openComponent(BnaComponentDefinition component) {
     final Widget page = switch (component.slug) {
+      'badge' => const BnaBadgeComponentPage(),
       'button' => const BnaButtonComponentPage(),
       'card' => const BnaCardComponentPage(),
       'avoid-keyboard' => const BnaAvoidKeyboardComponentPage(),
@@ -217,6 +220,7 @@ class _BnaUiLibraryPageState extends State<BnaUiLibraryPage> {
       'input' => const BnaInputComponentPage(),
       'input-otp' => const BnaInputOtpComponentPage(),
       'link' => const BnaLinkComponentPage(),
+      'separator' => const BnaSeparatorComponentPage(),
       'spinner' => const BnaSpinnerComponentPage(),
       'tabs' => const BnaTabsComponentPage(),
       'text' => const BnaTextComponentPage(),

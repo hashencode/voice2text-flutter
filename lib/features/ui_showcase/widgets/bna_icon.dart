@@ -26,11 +26,12 @@ class BnaIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final BnaShowcaseColors colors = BnaShowcaseColors.of(context);
     final Brightness brightness = Theme.of(context).brightness;
+    final IconThemeData inheritedTheme = IconTheme.of(context);
 
     return Icon(
       _resolveIcon(icon, strokeWidth),
       size: size,
-      color: color ?? _resolveColor(colors, brightness),
+      color: color ?? inheritedTheme.color ?? _resolveColor(colors, brightness),
       semanticLabel: semanticLabel,
     );
   }

@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher_platform_interface/link.dart';
+import 'package:voice2text_flutter/features/ui_showcase/pages/badge_component_page.dart';
 import 'package:voice2text_flutter/features/ui_showcase/pages/button_component_page.dart';
 import 'package:voice2text_flutter/features/ui_showcase/pages/card_component_page.dart';
 import 'package:voice2text_flutter/features/ui_showcase/pages/input_component_page.dart';
 import 'package:voice2text_flutter/features/ui_showcase/pages/link_component_page.dart';
+import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_badge.dart';
 import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_button.dart';
 import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_card.dart';
 import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_icon.dart';
 import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_link.dart';
+import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_separator.dart';
 import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_showcase_shell.dart';
 import 'package:voice2text_flutter/features/ui_showcase/widgets/bna_text.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
@@ -228,6 +231,89 @@ void main() {
     );
     expect(text.style?.fontSize, 14);
     expect(text.style?.height, 1.05);
+  });
+
+  testWidgets('badge outline variant preserves border and text semantics', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: BnaBadge(
+            variant: BnaBadgeVariant.outline,
+            child: Text('Outline'),
+          ),
+        ),
+      ),
+    );
+
+    final DecoratedBox box = tester.widget<DecoratedBox>(
+      find.descendant(
+        of: find.byType(BnaBadge),
+        matching: find.byType(DecoratedBox),
+      ),
+    );
+    final BoxDecoration decoration = box.decoration as BoxDecoration;
+    final RichText richText = tester.widget<RichText>(find.byType(RichText));
+
+    expect(decoration.color, Colors.transparent);
+    expect(decoration.border, isNotNull);
+    expect(richText.text.style?.color, const Color(0xFF18181B));
+  });
+
+  testWidgets('badge interactive demo removes tags when tapped', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: BnaBadgeComponentPage()));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Badge / Interactive'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    final Finder reactChip = find.text('React');
+    expect(reactChip, findsOneWidget);
+
+    await tester.tap(reactChip);
+    await tester.pumpAndSettle();
+
+    expect(find.text('React'), findsNothing);
+  });
+
+  testWidgets('separator supports vertical orientation defaults', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 60,
+            child: BnaSeparator(orientation: BnaSeparatorOrientation.vertical),
+          ),
+        ),
+      ),
+    );
+
+    final SizedBox line = tester.widget<SizedBox>(
+      find.descendant(
+        of: find.byType(BnaSeparator),
+        matching: find.byType(SizedBox),
+      ),
+    );
+    final DecoratedBox box = tester.widget<DecoratedBox>(
+      find.descendant(
+        of: find.byType(BnaSeparator),
+        matching: find.byType(DecoratedBox),
+      ),
+    );
+    final BoxDecoration decoration = box.decoration as BoxDecoration;
+
+    expect(line.width, 1);
+    expect(line.height, double.infinity);
+    expect(decoration.color, const Color(0xFFC6C6C8));
   });
 
   testWidgets('card defaults to the configured light card color token', (

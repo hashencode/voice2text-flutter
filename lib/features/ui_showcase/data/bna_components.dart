@@ -75,7 +75,7 @@ const List<BnaComponentDefinition> bnaComponents = <BnaComponentDefinition>[
     name: 'Badge',
     slug: 'badge',
     description: 'Small labels and state indicators.',
-    status: BnaComponentStatus.planned,
+    status: BnaComponentStatus.migrated,
   ),
   BnaComponentDefinition(
     name: 'BottomSheet',
@@ -251,7 +251,7 @@ const List<BnaComponentDefinition> bnaComponents = <BnaComponentDefinition>[
     name: 'Separator',
     slug: 'separator',
     description: 'Visual dividers.',
-    status: BnaComponentStatus.planned,
+    status: BnaComponentStatus.migrated,
   ),
   BnaComponentDefinition(
     name: 'Share',
