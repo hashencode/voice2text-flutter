@@ -318,6 +318,97 @@ describe("sidebar navigation e2e", () => {
     ).toBeVisible();
   });
 
+  it("shares a runtime-only pane width across sections, collapse, and viewport clamps", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1280,
+      writable: true,
+    });
+    applicationApi({
+      ...restored,
+      navigation: { section: "library" },
+      library: { phase: "ready", audioCount: 1 },
+      capture: { phase: "idle" },
+    });
+    const writes = vi.spyOn(Storage.prototype, "setItem");
+    const user = userEvent.setup();
+    const view = render(createElement(App));
+
+    let resizeHandle = await screen.findByRole("separator", {
+      name: "调整音频上下文面板宽度",
+    });
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "300");
+    expect(shellWidth()).toBe("350px");
+    for (let step = 0; step < 18; step += 1) {
+      fireEvent.keyDown(resizeHandle, { key: "ArrowRight" });
+    }
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "480");
+    expect(shellWidth()).toBe("530px");
+    expect(writes).not.toHaveBeenCalled();
+
+    for (const target of [
+      { navigation: /^互联$/, label: "互联" },
+      { navigation: /^消息/, label: "消息" },
+      { navigation: /^设置$/, label: "设置" },
+      { navigation: /^音频$/, label: "音频" },
+    ]) {
+      await user.click(screen.getByRole("button", { name: target.navigation }));
+      resizeHandle = await screen.findByRole("separator", {
+        name: `调整${target.label}上下文面板宽度`,
+      });
+      expect(resizeHandle).toHaveAttribute("aria-valuenow", "480");
+      expect(shellWidth()).toBe("530px");
+    }
+    expect(writes).not.toHaveBeenCalled();
+
+    await user.click(
+      screen.getByRole("button", { name: "收起音频上下文面板" }),
+    );
+    expect(
+      screen.queryByRole("separator", { name: /上下文面板宽度/ }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "打开音频上下文面板" }),
+    );
+    expect(
+      await screen.findByRole("separator", {
+        name: "调整音频上下文面板宽度",
+      }),
+    ).toHaveAttribute("aria-valuenow", "480");
+    expect(writes).toHaveBeenCalledTimes(2);
+    expect(
+      writes.mock.calls.every(
+        ([key]) => key === "voice2text.shell.context-panes.v1",
+      ),
+    ).toBe(true);
+
+    window.innerWidth = 880;
+    window.dispatchEvent(new Event("resize"));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("separator", { name: /上下文面板宽度/ }),
+      ).toHaveAttribute("aria-valuenow", "350"),
+    );
+    expect(shellWidth()).toBe("400px");
+    window.innerWidth = 1280;
+    window.dispatchEvent(new Event("resize"));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("separator", { name: /上下文面板宽度/ }),
+      ).toHaveAttribute("aria-valuenow", "480"),
+    );
+    expect(shellWidth()).toBe("530px");
+
+    view.unmount();
+    render(createElement(App));
+    expect(
+      await screen.findByRole("separator", {
+        name: "调整音频上下文面板宽度",
+      }),
+    ).toHaveAttribute("aria-valuenow", "300");
+    expect(shellWidth()).toBe("350px");
+  });
+
   it("reveals message details while keeping a narrow pane docked", async () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
@@ -443,3 +534,11 @@ describe("sidebar navigation e2e", () => {
     expect(controlAudioPlayback).toHaveBeenCalledTimes(1);
   });
 });
+
+function shellWidth() {
+  const wrapper = document.querySelector<HTMLElement>(
+    '[data-slot="sidebar-wrapper"]',
+  );
+  if (!wrapper) throw new Error("Expected the sidebar wrapper");
+  return wrapper.style.getPropertyValue("--sidebar-width");
+}

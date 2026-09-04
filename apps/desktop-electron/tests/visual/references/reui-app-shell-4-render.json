@@ -182,13 +182,15 @@
       "History arrow icons retained instead of message chevrons.",
       "Native title retained on collapse handle; no demo hover label.",
       "Thin 1px keyboard focus retained instead of target input 3px ring.",
-      "880px docked minimum retained instead of target mobile sheet."
+      "880px docked minimum retained instead of target mobile sheet.",
+      "Voice2Text product context pane now defaults to 300px and supports a shared runtime resize range of 240px through 480px; the public ReUI evidence remains fixed at 390px with x=440 content origin."
     ],
     "verification": {
-      "visual": "11 tests passed without updating snapshots; 10 accepted product goldens.",
-      "ui": "check:ui:quick and final check:ui passed: formatting, lint, TypeScript and 204 tests across 19 files.",
-      "review": "Five read-only review perspectives completed; the sole proposed coverage gap was independently rejected because existing integration tests exercise reopening. No actionable findings remain."
+      "visual": "Historical 2026-09-03 result: 11 tests passed without updating snapshots; 10 product goldens were accepted before the runtime pane-width change.",
+      "ui": "Historical 2026-09-03 result: check:ui:quick and final check:ui passed formatting, lint, TypeScript and 204 tests across 19 files before the runtime pane-width change.",
+      "review": "Historical 2026-09-03 result: five read-only review perspectives completed; this does not verify the newer runtime pane-width contract."
     },
-    "remaining": "No pending shared-chrome acceptance work. Original-source equivalence, whole-page pixel equality, packaged resources and animated-transition correctness are not claimed."
+    "currentProductAcceptance": "Pending explicit visual-validation authorization: verify the 300px default and x=350 content origin, drag/release behavior, 1280px-to-880px temporary clamp from 480px to 350px and restoration to 480px, four-section sharing, collapse-control isolation, reload reset, and width-sensitive product goldens.",
+    "remaining": "Runtime pane-width visual acceptance and width-sensitive product golden refresh are pending. Original-source equivalence, whole-page pixel equality, packaged resources and animated-transition correctness are not claimed."
   }
 }

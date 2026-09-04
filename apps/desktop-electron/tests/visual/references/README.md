@@ -13,7 +13,21 @@
 
 The historical `reui-app-shell-4-1280x720.png` from 2026-09-02 remains unchanged, with its checksum retained in the render record.
 
-The image and render record govern observable shell composition, fixed-column geometry, density, divider placement, control placement and state hierarchy. They are public-render evidence, not the original ReUI React or Registry source. Local `radix-nova` primitives remain authoritative for component semantics, keyboard behavior, focus and independently authored implementation.
+The pinned public reference continues to record a 390px context pane and x=440
+content origin. Voice2Text now deliberately differs: its product context pane
+defaults to 300px, is adjustable at runtime from 240px through 480px, shares one
+requested width across the four main sections, and temporarily clamps without
+overwriting that request when the window narrows. This product delta does not
+alter the reference image, DOM evidence, geometry, or checksums. Actual rendered
+product acceptance and width-sensitive golden refresh remain pending explicit
+visual-validation authorization.
+
+The image and render record govern the observed ReUI shell composition,
+fixed-column geometry, density, divider placement, control placement and state
+hierarchy. They are public-render evidence, not the current Voice2Text width
+contract, the original ReUI React, or Registry source. Local `radix-nova`
+primitives remain authoritative for component semantics, keyboard behavior,
+focus and independently authored implementation.
 
 Authenticated ReUI MCP discovery was attempted on 2026-09-03 and returned `locked: true` with `requiredPlan: pro`. The implementation therefore must not claim source access, bypass the premium Registry, decompile production bundles, copy the complete website stylesheet or hotlink ReUI runtime assets. The user explicitly approved using the observable public preview as the visual authority while implementing product behavior locally.
 

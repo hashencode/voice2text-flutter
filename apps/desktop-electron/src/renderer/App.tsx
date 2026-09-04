@@ -42,6 +42,7 @@ import {
 } from "@/features/shell/section-router-registry";
 import type { RendererShellSection } from "@/features/shell/context-pane-contract";
 import { useContextPaneShell } from "@/features/shell/use-context-pane-shell";
+import { useContextPaneWidth } from "@/features/shell/use-context-pane-width";
 import {
   CapabilityUnavailableDialog,
   LoadingShell,
@@ -132,6 +133,7 @@ function App() {
     [activeRoute.pathname, current],
   );
   const pane = useContextPaneShell(current);
+  const contextPaneWidth = useContextPaneWidth();
   const paneTriggerRef = React.useRef<HTMLButtonElement>(null);
   const paneTriggerFocusPendingRef = React.useRef(false);
   const contentTitleRef = React.useRef<HTMLHeadingElement>(null);
@@ -625,6 +627,13 @@ function App() {
       section={current}
       onNavigate={navigatePrimary}
       unreadActivityCount={unreadActivityItems.length}
+      contextPaneWidth={contextPaneWidth.effectiveWidth}
+      contextPaneResize={{
+        minimum: contextPaneWidth.limits.minimum,
+        maximum: contextPaneWidth.limits.maximum,
+        disabled: applicationBlocked || modalOpen,
+        onChange: contextPaneWidth.setRequestedWidth,
+      }}
       contextPane={
         paneStructurallyAvailable
           ? {
@@ -706,6 +715,7 @@ function App() {
       onTogglePane={requestPaneToggle}
       title={contentTitle}
       titleRef={contentTitleRef}
+      showHeader={!audioFirstUsePresentation}
       history={{
         canGoBack: activeRoute.canGoBack,
         canGoForward: activeRoute.canGoForward,

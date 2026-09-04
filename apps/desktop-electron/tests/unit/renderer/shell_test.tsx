@@ -49,6 +49,12 @@ describe("render-backed shell frame", () => {
           footer: <span>列表页脚</span>,
           children: <button type="button">夹具音频</button>,
         }}
+        contextPaneWidth={300}
+        contextPaneResize={{
+          minimum: 240,
+          maximum: 480,
+          onChange: vi.fn(),
+        }}
         onTogglePane={vi.fn()}
         title="夹具标题"
         history={{
@@ -69,7 +75,12 @@ describe("render-backed shell frame", () => {
       Array.from(wrapper.children).map((child) =>
         child.getAttribute("data-slot"),
       ),
-    ).toEqual(["sidebar", "sidebar-rail", "sidebar-inset"]);
+    ).toEqual([
+      "sidebar",
+      "pane-resize-handle",
+      "sidebar-rail",
+      "sidebar-inset",
+    ]);
     const sidebarInner = wrapper.querySelector('[data-slot="sidebar-inner"]')!;
     const navigation = screen.getByRole("navigation", { name: "工作站主导航" });
     const context = screen.getByRole("complementary", {
@@ -110,12 +121,17 @@ describe("render-backed shell frame", () => {
       "leading-snug",
     );
     expect(wrapper).toHaveStyle({
-      "--sidebar-width": "440px",
+      "--sidebar-width": "350px",
       "--sidebar-width-icon": "48px",
     });
     expect(
       screen.getByRole("button", { name: "收起音频上下文面板" }),
     ).toHaveAttribute("data-variant", "handle");
+    expect(
+      screen.getByRole("separator", {
+        name: "调整音频上下文面板宽度",
+      }),
+    ).toHaveStyle({ left: "var(--sidebar-width)" });
     expect(context).toHaveClass(
       "w-[calc(var(--sidebar-width)-var(--sidebar-width-icon)-2px)]!",
     );
@@ -150,6 +166,12 @@ describe("render-backed shell frame", () => {
           onRequestClose,
           children: <input aria-label="持久输入" defaultValue="初始值" />,
         }}
+        contextPaneWidth={300}
+        contextPaneResize={{
+          minimum: 240,
+          maximum: 480,
+          onChange: vi.fn(),
+        }}
         onTogglePane={onTogglePane}
         paneTriggerRef={paneTriggerRef}
         title="设置夹具"
@@ -167,6 +189,11 @@ describe("render-backed shell frame", () => {
     );
     const view = render(frame(true));
     const input = screen.getByRole("textbox", { name: "持久输入" });
+    expect(
+      screen.getByRole("separator", {
+        name: "调整设置上下文面板宽度",
+      }),
+    ).toBeVisible();
     fireEvent.change(input, { target: { value: "保留值" } });
     for (const slot of [
       "context-search",
@@ -190,6 +217,7 @@ describe("render-backed shell frame", () => {
       "false",
     );
     view.rerender(frame(false));
+    expect(screen.queryByRole("separator")).not.toBeInTheDocument();
     const pane = input.closest('[role="complementary"]');
     expect(pane).toHaveClass("bg-background", "text-foreground");
     expect(pane).toHaveAttribute("inert");
@@ -201,6 +229,7 @@ describe("render-backed shell frame", () => {
     paneTriggerRef.current?.focus();
     expect(paneTriggerRef.current).toHaveFocus();
     view.rerender(frame(true));
+    expect(screen.getByRole("separator")).toBeVisible();
     expect(screen.getByRole("textbox", { name: "持久输入" })).toBe(input);
     expect(pane).not.toHaveAttribute("inert");
     expect(titleRef.current).toBe(screen.getByRole("heading", { level: 1 }));
@@ -448,7 +477,7 @@ describe("application shell", () => {
     });
     expect(navigation).toBeVisible();
     expect(
-      screen.getByRole("complementary", { name: "音频上下文面板" }),
+      await screen.findByRole("complementary", { name: "音频上下文面板" }),
     ).toHaveAttribute("data-presentation", "docked");
 
     Object.defineProperty(window, "innerWidth", {
@@ -480,7 +509,16 @@ describe("application shell", () => {
       '[data-slot="sidebar-wrapper"]',
     );
     expect(wrapper).not.toBeNull();
-    expect(wrapper!.style.getPropertyValue("--sidebar-width")).toBe("440px");
+    expect(wrapper!.style.getPropertyValue("--sidebar-width")).toBe("350px");
+    const resizeHandle = screen.getByRole("separator", {
+      name: "调整音频上下文面板宽度",
+    });
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "300");
+    fireEvent.keyDown(resizeHandle, { key: "ArrowRight" });
+    await waitFor(() =>
+      expect(wrapper!.style.getPropertyValue("--sidebar-width")).toBe("360px"),
+    );
+    expect(resizeHandle).toHaveAttribute("aria-valuenow", "310");
 
     const outer = wrapper!.querySelector<HTMLElement>(
       ':scope > [data-slot="sidebar"]',
@@ -870,7 +908,7 @@ describe("application shell", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("suppresses the whole audio pane for true-empty without changing the saved preference", async () => {
+  it("suppresses the audio pane and top bar for true-empty without changing the saved preference", async () => {
     window.localStorage.setItem(
       "voice2text.shell.context-panes.v1",
       JSON.stringify({ audio: "open" }),
@@ -883,6 +921,12 @@ describe("application shell", () => {
     render(<App />);
 
     expect(await screen.findByText("开始你的第一段音频")).toBeVisible();
+    expect(
+      document.querySelector('[data-shell-slot="content-head"]'),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "后退" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "前进" })).toBeNull();
+    expect(screen.getByRole("button", { name: "导入外部音频" })).toBeVisible();
     expect(screen.getByRole("region", { name: "首次使用音频" })).toHaveClass(
       "flex-1",
       "justify-center",
@@ -892,6 +936,9 @@ describe("application shell", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /音频上下文面板/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("separator", { name: /音频上下文面板宽度/ }),
     ).not.toBeInTheDocument();
     expect(document.querySelector('[data-slot="sidebar-gap"]')).toHaveClass(
       "group-data-[collapsible=icon]:w-(--sidebar-width-icon)",
@@ -962,7 +1009,7 @@ describe("application shell", () => {
     },
   );
 
-  it("suppresses the pane when an authoritative refresh removes the last audio", async () => {
+  it("hides and restores the pane and top bar as the audio library becomes empty and populated", async () => {
     window.localStorage.setItem(
       "voice2text.shell.context-panes.v1",
       JSON.stringify({ audio: "open" }),
@@ -971,7 +1018,8 @@ describe("application shell", () => {
     const listAudios = vi
       .fn()
       .mockResolvedValueOnce([shellAudio])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([shellAudio]);
     let publish: ((snapshot: ApplicationSnapshot) => void) | undefined;
     const initial = {
       ...readySnapshot,
@@ -1004,6 +1052,9 @@ describe("application shell", () => {
 
     expect(await screen.findByText("开始你的第一段音频")).toBeVisible();
     expect(
+      document.querySelector('[data-shell-slot="content-head"]'),
+    ).toBeNull();
+    expect(
       screen.queryByRole("complementary", { name: "音频上下文面板" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /音频上下文面板/ })).toBeNull();
@@ -1013,6 +1064,16 @@ describe("application shell", () => {
     expect(
       window.localStorage.getItem("voice2text.shell.context-panes.v1"),
     ).toBe(JSON.stringify({ audio: "open" }));
+
+    act(() => publish?.({ ...initial, revision: initial.revision + 2 }));
+
+    expect(
+      await screen.findByRole("complementary", { name: "音频上下文面板" }),
+    ).toBeVisible();
+    expect(
+      document.querySelector('[data-shell-slot="content-head"]'),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "后退" })).toBeVisible();
   });
 
   it("opens a selected audio from recording setup after the back action is removed", async () => {

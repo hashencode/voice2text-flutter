@@ -17,6 +17,12 @@ const harnessPreload = path.resolve("tests/visual/.harness-build/preload.js");
 const rendererUrl = "http://127.0.0.1:4179";
 const canonicalScreenshots =
   process.platform === "darwin" && process.arch === "arm64";
+const PRODUCT_CONTEXT_PANE_WIDTH = 300;
+const PRODUCT_CONTEXT_PANE_MINIMUM = 240;
+const PRODUCT_CONTEXT_PANE_MAXIMUM = 480;
+const PRODUCT_MAIN_CONTENT_MINIMUM = 480;
+const PRIMARY_RAIL_WIDTH = 49;
+const CONTEXT_PANE_BORDER_WIDTH = 1;
 
 test.describe("sidebar-09 production Renderer", () => {
   test.beforeAll(() => {
@@ -291,6 +297,63 @@ test.describe("sidebar-09 production Renderer", () => {
     });
   });
 
+  test("shares runtime pane resizing, preserves requested width through viewport clamps, and resets on reload", async () => {
+    await withVisualSession("audio-closed", 1280, 720, async (session) => {
+      const { page } = session;
+      await assertDockedGeometry(page, 1280, 720, PRODUCT_CONTEXT_PANE_WIDTH);
+
+      const resizeHandle = page.getByRole("separator", {
+        name: "调整音频上下文面板宽度",
+      });
+      await dragPaneDivider(page, "upper", 90);
+      await assertDockedGeometry(page, 1280, 720, 390);
+      await dragPaneDivider(page, "lower", 90);
+      await expect(resizeHandle).toHaveAttribute(
+        "aria-valuenow",
+        String(PRODUCT_CONTEXT_PANE_MAXIMUM),
+      );
+      await assertDockedGeometry(page, 1280, 720, PRODUCT_CONTEXT_PANE_MAXIMUM);
+
+      const collapseButton = page.getByRole("button", {
+        name: "收起音频上下文面板",
+      });
+      await collapseButton.click();
+      await assertRailOnlyGeometry(page, 1280, 720, true, 480);
+      await page.getByRole("button", { name: "打开音频上下文面板" }).click();
+      await assertDockedGeometry(page, 1280, 720, PRODUCT_CONTEXT_PANE_MAXIMUM);
+      await expect(
+        page.getByRole("complementary", { name: "音频上下文面板" }),
+      ).toBeVisible();
+
+      for (const target of [
+        { navigation: "互联", pane: "互联上下文面板" },
+        { navigation: "消息", pane: "消息上下文面板" },
+        { navigation: "设置", pane: "设置上下文面板" },
+        { navigation: "音频", pane: "音频上下文面板" },
+      ]) {
+        await page.getByRole("button", { name: target.navigation }).click();
+        await expect(
+          page.getByRole("complementary", { name: target.pane }),
+        ).toBeVisible();
+        await assertDockedGeometry(
+          page,
+          1280,
+          720,
+          PRODUCT_CONTEXT_PANE_MAXIMUM,
+        );
+      }
+
+      await resizeVisualWindow(session, 880, 720);
+      await assertDockedGeometry(page, 880, 720, 350);
+      await resizeVisualWindow(session, 1280, 720);
+      await assertDockedGeometry(page, 1280, 720, PRODUCT_CONTEXT_PANE_MAXIMUM);
+
+      await page.reload();
+      await page.waitForLoadState("networkidle");
+      await assertDockedGeometry(page, 1280, 720, PRODUCT_CONTEXT_PANE_WIDTH);
+    });
+  });
+
   test("320x96 privacy-safe floating capture control", async () => {
     const session = await launch(
       "audio-active",
@@ -486,26 +549,77 @@ async function assertDockedGeometry(
   page: Awaited<ReturnType<typeof launch>>["page"],
   width: number,
   height: number,
+  contextPaneWidth = PRODUCT_CONTEXT_PANE_WIDTH,
 ) {
+  const expandedPrefix =
+    PRIMARY_RAIL_WIDTH + contextPaneWidth + CONTEXT_PANE_BORDER_WIDTH;
   const geometry = await shellGeometry(page);
   expectRect(geometry.wrapper, { x: 0, y: 0, width, height });
-  expectHorizontalRect(geometry.gap, { x: 0, width: 440 });
-  expectRect(geometry.container, { x: 0, y: 0, width: 440, height });
-  expectRect(geometry.rail, { x: 0, y: 0, width: 49, height });
+  expectHorizontalRect(geometry.gap, { x: 0, width: expandedPrefix });
+  expectRect(geometry.container, {
+    x: 0,
+    y: 0,
+    width: expandedPrefix,
+    height,
+  });
+  expectRect(geometry.rail, {
+    x: 0,
+    y: 0,
+    width: PRIMARY_RAIL_WIDTH,
+    height,
+  });
   expectWithin(geometry.railContentWidth, 48);
   expectWithin(geometry.railBorderRight, 1);
   if (!geometry.pane) throw new Error("Expected a docked context pane");
-  expectRect(geometry.pane, { x: 49, y: 0, width: 390, height });
+  expectRect(geometry.pane, {
+    x: PRIMARY_RAIL_WIDTH,
+    y: 0,
+    width: contextPaneWidth,
+    height,
+  });
+  if (!geometry.resizeHandle)
+    throw new Error("Expected a docked pane resize handle");
+  expectWithin(
+    geometry.resizeHandle.x + geometry.resizeHandle.width / 2,
+    expandedPrefix,
+  );
+  expectWithin(geometry.resizeHandleValue!, contextPaneWidth);
+  expectWithin(geometry.resizeHandleMinimum!, PRODUCT_CONTEXT_PANE_MINIMUM);
+  expectWithin(
+    geometry.resizeHandleMaximum!,
+    Math.max(
+      PRODUCT_CONTEXT_PANE_MINIMUM,
+      Math.min(
+        PRODUCT_CONTEXT_PANE_MAXIMUM,
+        width -
+          PRIMARY_RAIL_WIDTH -
+          CONTEXT_PANE_BORDER_WIDTH -
+          PRODUCT_MAIN_CONTENT_MINIMUM,
+      ),
+    ),
+  );
   if (!geometry.midpointRail)
     throw new Error("Expected a docked midpoint rail");
   expectRect(geometry.midpointRail, {
-    x: 440,
+    x: expandedPrefix,
     y: height / 2 - 24,
     width: 28,
     height: 48,
   });
-  expectWithin(geometry.inset.x, 440);
-  expectWithin(geometry.inset.width, Math.max(0, width - 440));
+  if (!geometry.upperResizeHitArea || !geometry.lowerResizeHitArea) {
+    throw new Error("Expected split pane resize hit areas");
+  }
+  expect(geometry.upperResizeHitArea.bottom).toBeLessThanOrEqual(
+    geometry.midpointRail.y,
+  );
+  expect(geometry.lowerResizeHitArea.y).toBeGreaterThanOrEqual(
+    geometry.midpointRail.bottom,
+  );
+  expectWithin(geometry.inset.x, expandedPrefix);
+  expectWithin(geometry.inset.width, Math.max(0, width - expandedPrefix));
+  expect(geometry.inset.width).toBeGreaterThanOrEqual(
+    PRODUCT_MAIN_CONTENT_MINIMUM,
+  );
 }
 
 async function assertRailOnlyGeometry(
@@ -513,6 +627,7 @@ async function assertRailOnlyGeometry(
   width: number,
   height: number,
   collapsedPaneMounted = true,
+  contextPaneWidth = PRODUCT_CONTEXT_PANE_WIDTH,
 ) {
   await expect
     .poll(async () => {
@@ -527,10 +642,16 @@ async function assertRailOnlyGeometry(
   expectRect(geometry.rail, { x: 0, y: 0, width: 49, height });
   expectWithin(geometry.railContentWidth, 48);
   expectWithin(geometry.railBorderRight, 1);
+  expect(geometry.resizeHandle).toBeNull();
   if (collapsedPaneMounted) {
     if (!geometry.pane)
       throw new Error("Expected the collapsed pane to remain mounted");
-    expectRect(geometry.pane, { x: 49, y: 0, width: 390, height });
+    expectRect(geometry.pane, {
+      x: PRIMARY_RAIL_WIDTH,
+      y: 0,
+      width: contextPaneWidth,
+      height,
+    });
     if (!geometry.midpointRail)
       throw new Error("Expected the collapsed midpoint rail to remain mounted");
     expectRect(geometry.midpointRail, {
@@ -626,8 +747,8 @@ async function assertReferenceChrome(
   }
   if (expectsSearch) {
     expectWithin(geometry.searchBand!.height, 45);
-    expectWithin(geometry.searchInput!.x, 61);
-    expectWithin(geometry.searchInput!.width, 366);
+    expectWithin(geometry.searchInput!.x, PRIMARY_RAIL_WIDTH + 12);
+    expectWithin(geometry.searchInput!.width, PRODUCT_CONTEXT_PANE_WIDTH - 24);
     expectWithin(geometry.searchInput!.height, 28);
     expect(geometry.searchInput!.fontSize).toBe("12px");
     expect(geometry.searchInput!.borderRadius).toBe("10px");
@@ -801,6 +922,7 @@ async function assertAudioFirstUseMinimumGeometry(
 async function audioFirstUseGeometry(
   page: Awaited<ReturnType<typeof launch>>["page"],
 ) {
+  await expect(page.locator('[data-shell-slot="content-head"]')).toHaveCount(0);
   return await page.evaluate(() => {
     const main = required("#main-content");
     const frame = required('[data-audio-first-use="frame"]');
@@ -913,6 +1035,15 @@ async function shellGeometry(page: Awaited<ReturnType<typeof launch>>["page"]) {
     const midpointRail = wrapper.querySelector<HTMLElement>(
       ':scope > [data-context-pane-midpoint-rail="true"]',
     );
+    const resizeHandle = wrapper.querySelector<HTMLElement>(
+      ':scope > [data-slot="pane-resize-handle"]',
+    );
+    const upperResizeHitArea = resizeHandle?.querySelector<HTMLElement>(
+      '[data-pane-resize-hit-area="upper"]',
+    );
+    const lowerResizeHitArea = resizeHandle?.querySelector<HTMLElement>(
+      '[data-pane-resize-hit-area="lower"]',
+    );
     const railStyle = getComputedStyle(rail);
     return {
       wrapper: rect(wrapper),
@@ -920,6 +1051,18 @@ async function shellGeometry(page: Awaited<ReturnType<typeof launch>>["page"]) {
       container: rect(container),
       rail: rect(rail),
       pane: pane ? rect(pane) : null,
+      resizeHandle: resizeHandle ? rect(resizeHandle) : null,
+      upperResizeHitArea: upperResizeHitArea ? rect(upperResizeHitArea) : null,
+      lowerResizeHitArea: lowerResizeHitArea ? rect(lowerResizeHitArea) : null,
+      resizeHandleValue: resizeHandle
+        ? Number(resizeHandle.getAttribute("aria-valuenow"))
+        : null,
+      resizeHandleMinimum: resizeHandle
+        ? Number(resizeHandle.getAttribute("aria-valuemin"))
+        : null,
+      resizeHandleMaximum: resizeHandle
+        ? Number(resizeHandle.getAttribute("aria-valuemax"))
+        : null,
       midpointRail: midpointRail ? rect(midpointRail) : null,
       inset: rect(inset),
       railContentWidth:
@@ -947,6 +1090,51 @@ async function shellGeometry(page: Awaited<ReturnType<typeof launch>>["page"]) {
       };
     }
   });
+}
+
+async function dragPaneDivider(
+  page: Awaited<ReturnType<typeof launch>>["page"],
+  area: "upper" | "lower",
+  deltaX: number,
+) {
+  const hitArea = page.locator(`[data-pane-resize-hit-area="${area}"]`);
+  const box = await hitArea.boundingBox();
+  if (!box) throw new Error(`Expected the ${area} pane resize hit area`);
+  const point = {
+    x: box.x + box.width / 2,
+    y: area === "upper" ? box.y + box.height - 2 : box.y + 2,
+  };
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.mouse.move(point.x + deltaX, point.y);
+  await page.mouse.up();
+}
+
+async function resizeVisualWindow(
+  session: Awaited<ReturnType<typeof launch>>,
+  width: number,
+  height: number,
+) {
+  await session.app.evaluate(
+    ({ BrowserWindow, screen }, size) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      if (!window) throw new Error("Visual BrowserWindow is unavailable");
+      const scaleFactor = screen.getPrimaryDisplay().scaleFactor;
+      window.setContentSize(
+        Math.round(size.width / scaleFactor),
+        Math.round(size.height / scaleFactor),
+      );
+    },
+    { width, height },
+  );
+  await expect
+    .poll(() =>
+      session.page.evaluate(() => ({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      })),
+    )
+    .toEqual({ width, height });
 }
 
 function expectRect(

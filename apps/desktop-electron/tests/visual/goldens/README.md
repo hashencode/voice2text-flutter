@@ -1,5 +1,15 @@
 # Renderer visual baseline authority
 
+The audio first-use top bar is now intentionally omitted. The two
+`audio-empty-recording-ready*.png` baselines still show the previous header and
+require an authorized visual review and refresh; they do not validate this change.
+
+The product shell now defaults its context pane to 300px and supports runtime
+resizing from 240px through 480px while retaining at least 480px for main
+content. The width-sensitive product PNGs below predate that contract and are
+pending an authorized visual review and refresh. Until then they do not validate
+the 300px default, drag behavior, viewport clamping, or shared runtime width.
+
 These images are canonical only for the following rendering contract:
 
 - macOS 15.7.5 (24G624), Apple arm64
@@ -9,7 +19,12 @@ These images are canonical only for the following rendering contract:
 - `zh-CN`, light color scheme, reduced motion, fixed fixture time `2026-08-19T03:20:00.000Z`
 - target shell font stack `"Inter Variable", Inter, "PingFang SC", -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif` (self-hosted Inter; the floating Renderer imports the shared stylesheet and inherits this font)
 
-These ten baselines were inspected and refreshed during authorized visual acceptance on 2026-09-03. The final no-update visual run passed all eleven tests, including hover, selected, keyboard-focus and disabled-state assertions. The floating control retains its layout and behavior; its small timer-glyph delta reflects the shared font change.
+These ten baselines were inspected and refreshed during the previous authorized
+visual acceptance on 2026-09-03. That historical no-update run passed all eleven
+tests, including hover, selected, keyboard-focus and disabled-state assertions;
+it is not evidence for the newer pane-width contract. The floating control
+retains its layout and behavior; its small timer-glyph delta reflects the shared
+font change.
 
 The shell baselines are:
 
@@ -24,7 +39,14 @@ The shell baselines are:
 - `companion-multiple-devices.png`
 - `floating-capture-recording.png`
 
-The 1280×720 shell comparison uses `../references/reui-app-shell-4-2026-09-03-1280x720.png`. Direct image inspection and regional assertions check the 49px primary rail, 390px context column plus divider, x=440 content origin, aligned 50px heads, 45px search band, compact filters, midpoint rail, density, borders, and shadowless surfaces. Product content remains Voice2Text-specific. Reference Chromium 151 and product Chromium 150 are recorded separately; acceptance is not a whole-page pixel-equality claim.
+The 1280×720 shell comparison uses
+`../references/reui-app-shell-4-2026-09-03-1280x720.png`. Its 390px context
+column and x=440 content origin remain historical public-reference evidence,
+not current Voice2Text product geometry. Current product assertions target a
+49px primary rail, 300px default context pane plus 1px divider, x=350 content
+origin, aligned heads, compact controls, borders, and shadowless surfaces.
+Reference Chromium 151 and product Chromium 150 are recorded separately;
+acceptance is not a whole-page pixel-equality claim.
 
 When visual execution is authorized, non-macOS-arm64 hosts still execute the semantic and 0.5px-tolerance geometry assertions, but do not create or compare these canonical images. The suite checks pinned reference image and render-evidence checksums before launching sessions; checksum integrity alone does not establish visual parity.
 
