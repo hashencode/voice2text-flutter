@@ -10,10 +10,16 @@ export const SHELL_SECTION_LABELS: Record<RendererShellSection, string> = {
 };
 export type ContextPanePresentation = "docked" | "overlay";
 
+export const CONTEXT_PANE_WIDTH = {
+  default: 300,
+  minimum: 240,
+  maximum: 480,
+  mainContentMinimum: 480,
+} as const;
+
 export const SHELL_GEOMETRY = {
   primaryRailWidth: 49,
-  contextPaneWidth: 390,
-  expandedPrefixWidth: 440,
+  contextPaneOuterBorderWidth: 1,
   collapsedPrefixWidth: 48,
   headerHeight: 50,
   searchBandHeight: 45,
@@ -22,3 +28,11 @@ export const SHELL_GEOMETRY = {
   midpointRailWidth: 28,
   midpointRailHeight: 48,
 } as const;
+
+export function expandedContextPanePrefixWidth(contextPaneWidth: number) {
+  return (
+    SHELL_GEOMETRY.primaryRailWidth +
+    contextPaneWidth +
+    SHELL_GEOMETRY.contextPaneOuterBorderWidth
+  );
+}

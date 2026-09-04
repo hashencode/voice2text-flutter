@@ -1,8 +1,9 @@
-import type * as React from "react";
+import * as React from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
+import { PaneResizeHandle } from "@/components/ui/pane-resize-handle";
 import { Separator } from "@/components/ui/separator";
 import {
   SidebarInset,
@@ -11,21 +12,32 @@ import {
 } from "@/components/ui/sidebar";
 import { ContextPaneShell } from "@/features/shell/context-pane-shell";
 import {
+  expandedContextPanePrefixWidth,
   SHELL_GEOMETRY,
   SHELL_SECTION_LABELS,
   type RendererShellSection,
 } from "@/features/shell/context-pane-contract";
 import { cn } from "@/lib/utils";
 
+type ContextPaneResizeConfig = {
+  minimum: number;
+  maximum: number;
+  disabled?: boolean;
+  onChange: (width: number) => void;
+};
+
 type AppShellFrameProps = React.PropsWithChildren<{
   section: RendererShellSection;
   onNavigate: (section: RendererShellSection) => void;
   unreadActivityCount: number;
   contextPane: React.ComponentProps<typeof ContextPaneShell> | null;
+  contextPaneWidth: number;
+  contextPaneResize?: ContextPaneResizeConfig;
   onTogglePane: () => void;
   paneTriggerRef?: React.Ref<HTMLButtonElement>;
   title: string;
   titleRef?: React.Ref<HTMLHeadingElement>;
+  showHeader?: boolean;
   history: {
     canGoBack: boolean;
     canGoForward: boolean;
@@ -46,10 +58,13 @@ export function AppShellFrame({
   onNavigate,
   unreadActivityCount,
   contextPane,
+  contextPaneWidth,
+  contextPaneResize,
   onTogglePane,
   paneTriggerRef,
   title,
   titleRef,
+  showHeader = true,
   history,
   actions,
   notice,
@@ -58,18 +73,21 @@ export function AppShellFrame({
   contentTone = "default",
   children,
 }: AppShellFrameProps) {
+  const [contextPaneResizing, setContextPaneResizing] = React.useState(false);
   const open = contextPane?.open ?? false;
   const paneLabel = `${open ? "收起" : "打开"}${SHELL_SECTION_LABELS[contextPane?.section ?? section]}上下文面板`;
+  const resizeLabel = `调整${SHELL_SECTION_LABELS[contextPane?.section ?? section]}上下文面板宽度`;
 
   return (
     <SidebarProvider
       open={open}
       persistState={false}
       enableKeyboardShortcut={false}
+      data-resizing={contextPaneResizing ? "true" : undefined}
       className="relative h-svh overflow-hidden"
       style={
         {
-          "--sidebar-width": `${SHELL_GEOMETRY.expandedPrefixWidth}px`,
+          "--sidebar-width": `${expandedContextPanePrefixWidth(contextPaneWidth)}px`,
           "--sidebar-width-icon": `${SHELL_GEOMETRY.collapsedPrefixWidth}px`,
         } as React.CSSProperties
       }
@@ -82,6 +100,19 @@ export function AppShellFrame({
       >
         {contextPane ? <ContextPaneShell {...contextPane} /> : null}
       </AppSidebar>
+      {contextPane && open && contextPaneResize ? (
+        <PaneResizeHandle
+          aria-label={resizeLabel}
+          value={contextPaneWidth}
+          minimum={contextPaneResize.minimum}
+          maximum={contextPaneResize.maximum}
+          disabled={contextPaneResize.disabled}
+          cancellationKey={section}
+          onResize={contextPaneResize.onChange}
+          onResizeStateChange={setContextPaneResizing}
+          style={{ left: "var(--sidebar-width)" }}
+        />
+      ) : null}
       {contextPane ? (
         <SidebarRail
           ref={paneTriggerRef}
@@ -99,50 +130,52 @@ export function AppShellFrame({
         />
       ) : null}
       <SidebarInset className="z-30 min-h-0 min-w-0 overflow-hidden">
-        <header
-          data-shell-slot="content-head"
-          className="sticky top-0 z-10 flex h-[50px] shrink-0 items-center gap-1.5 border-b bg-background px-4"
-        >
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="size-7"
-            aria-label="后退"
-            disabled={!history.canGoBack}
-            onClick={history.onBack}
+        {showHeader ? (
+          <header
+            data-shell-slot="content-head"
+            className="sticky top-0 z-10 flex h-[50px] shrink-0 items-center gap-1.5 border-b bg-background px-4"
           >
-            <ArrowLeft aria-hidden="true" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="size-7"
-            aria-label="前进"
-            disabled={!history.canGoForward}
-            onClick={history.onForward}
-          >
-            <ArrowRight aria-hidden="true" />
-          </Button>
-          <Separator
-            orientation="vertical"
-            className="data-[orientation=vertical]:h-5"
-          />
-          <h1
-            ref={titleRef}
-            tabIndex={-1}
-            className="min-w-0 flex-1 truncate text-sm leading-snug font-semibold"
-            data-slot="content-title"
-          >
-            {title}
-          </h1>
-          {actions ? (
-            <div data-shell-slot="page-actions" className="ml-auto shrink-0">
-              {actions}
-            </div>
-          ) : null}
-        </header>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="size-7"
+              aria-label="后退"
+              disabled={!history.canGoBack}
+              onClick={history.onBack}
+            >
+              <ArrowLeft aria-hidden="true" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="size-7"
+              aria-label="前进"
+              disabled={!history.canGoForward}
+              onClick={history.onForward}
+            >
+              <ArrowRight aria-hidden="true" />
+            </Button>
+            <Separator
+              orientation="vertical"
+              className="data-[orientation=vertical]:h-5"
+            />
+            <h1
+              ref={titleRef}
+              tabIndex={-1}
+              className="min-w-0 flex-1 truncate text-sm leading-snug font-semibold"
+              data-slot="content-title"
+            >
+              {title}
+            </h1>
+            {actions ? (
+              <div data-shell-slot="page-actions" className="ml-auto shrink-0">
+                {actions}
+              </div>
+            ) : null}
+          </header>
+        ) : null}
         {notice ? (
           <div data-shell-slot="content-notice" className="shrink-0">
             {notice}
