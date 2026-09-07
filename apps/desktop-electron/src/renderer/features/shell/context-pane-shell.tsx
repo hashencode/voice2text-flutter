@@ -16,8 +16,9 @@ export function ContextPaneShell({
   section,
   presentation,
   onRequestClose,
-  collapseControl,
-  header,
+  head,
+  search,
+  filters,
   footer,
   children,
 }: React.PropsWithChildren<{
@@ -25,8 +26,9 @@ export function ContextPaneShell({
   section: ContextPaneSection;
   presentation: ContextPanePresentation;
   onRequestClose: () => void;
-  collapseControl?: React.ReactNode;
-  header?: React.ReactNode;
+  head?: React.ReactNode;
+  search?: React.ReactNode;
+  filters?: React.ReactNode;
   footer?: React.ReactNode;
 }>) {
   const label = SHELL_SECTION_LABELS[section];
@@ -50,23 +52,47 @@ export function ContextPaneShell({
       aria-hidden={!open}
       inert={!open}
       data-presentation={presentation}
-      className="w-[calc(var(--sidebar-width)-var(--sidebar-width-icon)-1px)]! shrink-0"
+      className="w-[calc(var(--sidebar-width)-var(--sidebar-width-icon)-2px)]! shrink-0 bg-background text-foreground"
     >
       <SidebarHeader
+        data-shell-slot="context-head"
+        data-context-pane-head="true"
         data-context-pane-fixed-header="true"
-        className={`${header ? "min-h-[58px]" : "h-[58px]"} shrink-0 gap-2 border-b p-2`}
+        className="h-[50px] shrink-0 gap-0 border-b p-0"
       >
-        <div className="flex h-[42px] min-w-0 shrink-0 items-center justify-between gap-2 px-2">
-          <h2 className="font-semibold">{label}</h2>
-          {collapseControl}
+        <div className="flex h-full min-w-0 shrink-0 items-center justify-between gap-2 px-3">
+          <h2 className="truncate text-sm font-semibold">{label}</h2>
+          {head ? <div className="min-w-0 shrink-0">{head}</div> : null}
         </div>
-        {header}
       </SidebarHeader>
-      <SidebarContent data-context-pane-scrolling-content="true">
+      {search ? (
+        <div
+          data-shell-slot="context-search"
+          data-context-pane-search="true"
+          className="flex h-[45px] shrink-0 items-center border-b border-border/60 px-3 py-2"
+        >
+          <div className="min-w-0 flex-1">{search}</div>
+        </div>
+      ) : null}
+      {filters ? (
+        <div
+          data-shell-slot="context-filters"
+          data-context-pane-filters="true"
+          className="flex h-[37px] shrink-0 items-center border-b border-border/60 px-2 py-1.5"
+        >
+          {filters}
+        </div>
+      ) : null}
+      <SidebarContent
+        data-shell-slot="context-list"
+        data-context-pane-scrolling-content="true"
+        className="gap-0"
+      >
         {children}
       </SidebarContent>
       {footer ? (
         <SidebarFooter
+          data-shell-slot="context-footer"
           data-context-pane-fixed-footer="true"
           className="shrink-0 border-t p-2"
         >

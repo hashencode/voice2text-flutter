@@ -1,7 +1,10 @@
 import path from "node:path";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 import { _electron as electron, expect, test } from "@playwright/test";
 import electronExecutable from "electron";
+import renderReference from "./references/reui-app-shell-4-render.json";
 
 import {
   buildVisualFixture,
@@ -12,58 +15,152 @@ import {
 const harnessMain = path.resolve("tests/visual/.harness-build/main.js");
 const harnessPreload = path.resolve("tests/visual/.harness-build/preload.js");
 const rendererUrl = "http://127.0.0.1:4179";
-const expectedFontStack =
-  '-apple-system, "system-ui", "SF Pro Text", "PingFang SC", sans-serif';
 const canonicalScreenshots =
   process.platform === "darwin" && process.arch === "arm64";
+const PRODUCT_CONTEXT_PANE_WIDTH = 300;
+const PRODUCT_CONTEXT_PANE_MINIMUM = 240;
+const PRODUCT_CONTEXT_PANE_MAXIMUM = 480;
+const PRODUCT_MAIN_CONTENT_MINIMUM = 480;
+const PRIMARY_RAIL_WIDTH = 49;
+const CONTEXT_PANE_BORDER_WIDTH = 1;
 
 test.describe("sidebar-09 production Renderer", () => {
-  test("1240x820 Audio open, selected, active capture", async () => {
-    await withVisualSession("audio-active", 1240, 820, async (session) => {
+  test.beforeAll(() => {
+    // This guards evidence integrity, not same-session visual acceptance.
+    const image = readFileSync(
+      path.resolve(
+        "tests/visual/references",
+        renderReference.referenceImage.path,
+      ),
+    );
+    expect(createHash("sha256").update(image).digest("hex")).toBe(
+      renderReference.referenceImage.sha256,
+    );
+    const rawEvidence = readFileSync(
+      path.resolve("tests/visual/references", renderReference.rawEvidence.path),
+    );
+    expect(createHash("sha256").update(rawEvidence).digest("hex")).toBe(
+      renderReference.rawEvidence.sha256,
+    );
+    const canonicalEvidence = `${JSON.stringify(sortEvidenceKeys(renderReference.evidence))}\n`;
+    expect(createHash("sha256").update(canonicalEvidence).digest("hex")).toBe(
+      renderReference.evidenceSha256,
+    );
+  });
+
+  test("1280x720 Audio App Shell 4 baseline", async () => {
+    await withVisualSession("audio-closed", 1280, 720, async (session) => {
       const { page } = session;
       await expect(
-        page.getByRole("heading", { name: "录制详情", level: 1 }),
+        page.getByRole("complementary", { name: "音频上下文面板" }),
+      ).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await page.getByRole("button", { name: "打开 产品设计评审.wav" }).click();
+      await expect(
+        page.getByRole("heading", { name: "产品设计评审.wav", level: 1 }),
+      ).toBeVisible();
+      await assertRuntimeContract(page, 1280, 720);
+      await assertDockedGeometry(page, 1280, 720);
+      await assertReferenceChrome(page, true);
+      await assertFlatRows(page, "音频列表");
+      await screenshot(session, "audio-app-shell-4.png", 1280, 720);
+    });
+  });
+
+  test("1280x720 Audio open, selected, active capture", async () => {
+    await withVisualSession("audio-active", 1280, 720, async (session) => {
+      const { page } = session;
+      await expect(
+        page.getByRole("button", { name: "产品设计评审", exact: true }),
       ).toBeVisible();
       await expect(
-        page.getByRole("complementary", { name: "录制控制" }),
-      ).toHaveCount(0);
+        page.getByRole("button", { name: "编辑录制名称" }),
+      ).toBeVisible();
       await expect(
-        page.getByRole("region", { name: "录制详情" }),
+        page.getByRole("complementary", { name: "音频上下文面板" }),
+      ).toHaveCount(0);
+      await expect(page.getByRole("region", { name: "录制详情" })).toHaveCount(
+        1,
+      );
+      await expect(
+        page.locator('[data-shell-slot="content-footer"]'),
       ).toContainText("正在录制");
 
-      const headerHeights = await page.evaluate(() => ({
-        pane: document
-          .querySelector<HTMLElement>("[data-context-pane-fixed-header]")!
-          .getBoundingClientRect().height,
-        content: document
-          .querySelector<HTMLElement>('[data-slot="sidebar-inset"] > header')!
-          .getBoundingClientRect().height,
-      }));
-      expect(headerHeights.pane).toBeGreaterThan(58);
-      expectWithin(headerHeights.content, 58);
+      const headerHeight = await page.evaluate(
+        () =>
+          document
+            .querySelector<HTMLElement>('[data-slot="sidebar-inset"] > header')!
+            .getBoundingClientRect().height,
+      );
+      expectWithin(headerHeight, 50);
 
-      await assertRuntimeContract(page, 1240, 820);
-      await assertDockedGeometry(page, 1240, 820);
-      await assertFlatRows(page, "音频列表");
-      await assertCaptureContainment(page, 1240, 820, false);
+      await assertRuntimeContract(page, 1280, 720);
+      await assertRailOnlyGeometry(page, 1280, 720, false);
+      await assertReferenceChrome(page, false, false);
+      await assertCaptureContainment(page, 1280, 720, false);
       await screenshot(
         session,
         "audio-open-selected-active-capture.png",
-        1240,
-        820,
+        1280,
+        720,
       );
     });
   });
 
-  test("1240x820 Audio pane closed", async () => {
-    await withVisualSession("audio-closed", 1240, 820, async (session) => {
+  test("context chrome preserves hover, selection, focus and disabled states", async () => {
+    await withVisualSession("audio-closed", 1280, 720, async ({ page }) => {
+      await expect(
+        page.getByRole("button", { name: "前进", exact: true }),
+      ).toHaveCount(0);
+      const filters = page.getByRole("group", { name: "音频筛选" });
+      const selectedFilter = filters.locator('[aria-pressed="true"]');
+      await expect(selectedFilter).toHaveCSS(
+        "background-color",
+        renderReference.evidence.tokens.primary,
+      );
+      const rows = page
+        .getByRole("list", { name: "音频列表" })
+        .locator("button[data-flat-row]");
+      const row = rows.nth(1);
+      await row.hover();
+      await expect(row).toHaveCSS(
+        "background-color",
+        renderReference.evidence.controls.listRow.hoverBackground,
+      );
+      await row.click();
+      await page.mouse.move(1200, 10);
+      await expect(row).toHaveAttribute("aria-current", "true");
+      await expect(row).toHaveCSS(
+        "background-color",
+        renderReference.evidence.controls.listRow.selectedBackground,
+      );
+      const search = page.getByRole("searchbox", {
+        name: "搜索音频",
+        exact: true,
+      });
+      await search.focus();
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Shift+Tab");
+      await expect(search).toBeFocused();
+      const focus = await search.evaluate((element) => ({
+        visible: element.matches(":focus-visible"),
+        shadow: getComputedStyle(element).boxShadow,
+      }));
+      expect(focus.visible).toBe(true);
+      expect(focus.shadow).toContain("0px 0px 0px 1px");
+      expect(focus.shadow).not.toContain("0px 0px 0px 3px");
+    });
+  });
+
+  test("1280x720 Audio pane closed", async () => {
+    await withVisualSession("audio-closed", 1280, 720, async (session) => {
       const { page } = session;
       await expect(
-        page.getByRole("region", { name: "录制准备" }),
+        page.getByRole("heading", { name: "请选择音频", level: 1 }),
       ).toBeVisible();
       await expect(
-        page.getByRole("heading", { name: "请选择音频", level: 1 }),
-      ).toHaveCount(0);
+        page.getByRole("button", { name: "导入音频" }),
+      ).toBeVisible();
       await page.getByRole("button", { name: "收起音频上下文面板" }).click();
       await expect(
         page.getByRole("complementary", { name: "音频上下文面板" }),
@@ -73,64 +170,74 @@ test.describe("sidebar-09 production Renderer", () => {
       ).toBeVisible();
       await expect(
         page.getByRole("heading", { name: "请选择音频", level: 1 }),
-      ).toHaveCount(0);
+      ).toBeVisible();
 
-      await assertRuntimeContract(page, 1240, 820);
-      await assertRailOnlyGeometry(page, 1240, 820);
-      await screenshot(session, "audio-pane-closed.png", 1240, 820);
+      await assertRuntimeContract(page, 1280, 720);
+      await assertRailOnlyGeometry(page, 1280, 720);
+      await assertReferenceChrome(page, false);
+      await screenshot(session, "audio-pane-closed.png", 1280, 720);
     });
   });
 
   test("1240x820 Empty audio library and recording ready", async () => {
     await withVisualSession("audio-empty", 1240, 820, async (session) => {
       const { page } = session;
-      const emptyHeading = page.getByRole("heading", { name: "还没有音频" });
+      const emptyHeading = page.getByRole("heading", {
+        name: "开始你的第一段音频",
+      });
       await expect(emptyHeading).toBeVisible();
       await expect(
-        page.getByRole("region", { name: "录制准备" }),
+        page.getByRole("region", { name: "首次使用音频" }),
       ).toBeVisible();
+      await expect(
+        page.getByRole("complementary", { name: "音频上下文面板" }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: /音频上下文面板/ }),
+      ).toHaveCount(0);
 
-      const layout = await emptyHeading.evaluate((heading) => {
-        const paneHeader = document.querySelector<HTMLElement>(
-          "[data-context-pane-fixed-header]",
-        )!;
-        const paneContent = document.querySelector<HTMLElement>(
-          "[data-context-pane-scrolling-content]",
-        )!;
-        const empty = heading.parentElement!;
-        const paneContentRect = paneContent.getBoundingClientRect();
-        const emptyRect = empty.getBoundingClientRect();
-        return {
-          paneHeaderHeight: paneHeader.getBoundingClientRect().height,
-          emptyCenterRatio:
-            (emptyRect.y + emptyRect.height / 2 - paneContentRect.y) /
-            paneContentRect.height,
-        };
-      });
-      expect(layout.paneHeaderHeight).toBeGreaterThan(58);
-      expect(layout.emptyCenterRatio).toBeGreaterThan(0.46);
-      expect(layout.emptyCenterRatio).toBeLessThan(0.54);
+      await assertAudioFirstUseDesktopGeometry(page);
 
       await assertRuntimeContract(page, 1240, 820);
-      await assertDockedGeometry(page, 1240, 820);
+      await assertRailOnlyGeometry(page, 1240, 820, false);
       await screenshot(session, "audio-empty-recording-ready.png", 1240, 820);
     });
   });
 
-  test("1240x820 Settings", async () => {
-    await withVisualSession("settings", 1240, 820, async (session) => {
+  test("880x620 Empty audio library respects the production minimum window", async () => {
+    await withVisualSession("audio-empty", 880, 620, async (session) => {
+      const { page } = session;
+      await expect(
+        page.getByRole("heading", { name: "开始你的第一段音频" }),
+      ).toBeVisible();
+
+      await assertAudioFirstUseMinimumGeometry(page);
+      await assertRuntimeContract(page, 880, 620);
+      await assertRailOnlyGeometry(page, 880, 620, false);
+      await screenshot(
+        session,
+        "audio-empty-recording-ready-minimum.png",
+        880,
+        620,
+      );
+    });
+  });
+
+  test("1280x720 Settings", async () => {
+    await withVisualSession("settings", 1280, 720, async (session) => {
       const { page } = session;
       await expect(
         page.getByRole("heading", { name: "通用", level: 2 }),
       ).toBeVisible();
-      await assertRuntimeContract(page, 1240, 820);
-      await assertDockedGeometry(page, 1240, 820);
-      await screenshot(session, "settings.png", 1240, 820);
+      await assertRuntimeContract(page, 1280, 720);
+      await assertDockedGeometry(page, 1280, 720);
+      await assertReferenceChrome(page, true, false);
+      await screenshot(session, "settings.png", 1280, 720);
     });
   });
 
-  test("1240x820 Activity messages with detail", async () => {
-    await withVisualSession("activity-messages", 1240, 820, async (session) => {
+  test("1280x720 Activity messages with detail", async () => {
+    await withVisualSession("activity-messages", 1280, 720, async (session) => {
       const { page } = session;
       await page.getByRole("button", { name: "消息，2 条未读" }).click();
       await page
@@ -138,58 +245,67 @@ test.describe("sidebar-09 production Renderer", () => {
         .click();
       await expect(
         page.getByRole("region", { name: "消息详情" }),
-      ).toContainText("只保存了部分音频");
+      ).toContainText("需要处理");
 
-      await assertRuntimeContract(page, 1240, 820);
-      await assertDockedGeometry(page, 1240, 820);
-      await screenshot(session, "activity-messages.png", 1240, 820);
+      await assertRuntimeContract(page, 1280, 720);
+      await assertDockedGeometry(page, 1280, 720);
+      await assertReferenceChrome(page, true);
+      await screenshot(session, "activity-messages.png", 1280, 720);
     });
   });
 
-  test("880x620 docked Audio with capture recovery and internal scroll", async () => {
+  test("880x620 docked Audio with capture recovery dialog", async () => {
     await withVisualSession("audio-recovery", 880, 620, async (session) => {
       const { page } = session;
       await expect(
-        page.getByRole("heading", { name: "录制详情", level: 1 }),
-      ).toBeVisible();
-      await expect(
         page.getByRole("complementary", { name: "录制控制" }),
       ).toHaveCount(0);
+      const recoveryDialog = page.getByRole("dialog", {
+        name: "发现可恢复录制",
+      });
+      await expect(recoveryDialog).toBeVisible();
       await expect(
-        page.getByRole("heading", { name: "发现可恢复录制" }),
+        recoveryDialog.getByText("发现 6 段未完成的录音，可一次恢复并保存。"),
       ).toBeVisible();
-      await page.getByRole("button", { name: "管理恢复录制" }).first().click();
+      await expect(
+        recoveryDialog.getByText("Recover-产品设计评审 1"),
+      ).toHaveCount(0);
+      await expect(
+        recoveryDialog.getByRole("button", { name: "恢复所有录音" }),
+      ).toBeVisible();
+      await expect(
+        recoveryDialog.getByRole("button", { name: "管理恢复录制" }),
+      ).toBeVisible();
+      await expect(page.getByRole("region", { name: "录制详情" })).toHaveCount(
+        0,
+      );
+      await expect(
+        page.locator('[data-shell-slot="content-footer"]'),
+      ).toHaveCount(0);
 
       await assertRuntimeContract(page, 880, 620);
       await assertDockedGeometry(page, 880, 620);
-      await assertFlatRows(page, "音频列表");
-      await assertCaptureContainment(page, 880, 620, true);
+      const dialogGeometry = await recoveryDialog.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          rect: {
+            x: rect.x,
+            y: rect.y,
+            right: rect.right,
+            bottom: rect.bottom,
+          },
+        };
+      });
+      expect(dialogGeometry.rect.x).toBeGreaterThanOrEqual(0);
+      expect(dialogGeometry.rect.y).toBeGreaterThanOrEqual(0);
+      expect(dialogGeometry.rect.right).toBeLessThanOrEqual(880);
+      expect(dialogGeometry.rect.bottom).toBeLessThanOrEqual(620);
       await screenshot(session, "audio-overlay-capture-recovery.png", 880, 620);
     });
   });
 
-  test("320x620 keeps the fixed docked pane controls reachable", async () => {
-    await withVisualSession("audio-active", 320, 620, async (session) => {
-      const { page } = session;
-      const collapse = page.getByRole("button", {
-        name: "收起音频上下文面板",
-      });
-
-      await expect(collapse).toBeVisible();
-      await assertRuntimeContract(page, 320, 620);
-      await assertDockedGeometry(page, 320, 620);
-
-      const collapseBounds = await collapse.boundingBox();
-      expect(collapseBounds).not.toBeNull();
-      expect(collapseBounds!.x).toBeGreaterThanOrEqual(0);
-      expect(collapseBounds!.x + collapseBounds!.width).toBeLessThanOrEqual(
-        320,
-      );
-    });
-  });
-
-  test("1240x820 Companion with multiple devices", async () => {
-    await withVisualSession("companion-devices", 1240, 820, async (session) => {
+  test("1280x720 Companion with multiple devices", async () => {
+    await withVisualSession("companion-devices", 1280, 720, async (session) => {
       const { page } = session;
       const pane = page.getByRole("complementary", { name: "互联上下文面板" });
       await expect(
@@ -203,10 +319,68 @@ test.describe("sidebar-09 production Renderer", () => {
         page.getByRole("heading", { name: "Studio 的 iPhone", level: 1 }),
       ).toBeVisible();
 
-      await assertRuntimeContract(page, 1240, 820);
-      await assertDockedGeometry(page, 1240, 820);
+      await assertRuntimeContract(page, 1280, 720);
+      await assertDockedGeometry(page, 1280, 720);
+      await assertReferenceChrome(page, true, false);
       await assertFlatRows(page, "已信任设备列表");
-      await screenshot(session, "companion-multiple-devices.png", 1240, 820);
+      await screenshot(session, "companion-multiple-devices.png", 1280, 720);
+    });
+  });
+
+  test("shares runtime pane resizing, preserves requested width through viewport clamps, and resets on reload", async () => {
+    await withVisualSession("pane-resize", 1280, 720, async (session) => {
+      const { page } = session;
+      await assertDockedGeometry(page, 1280, 720, PRODUCT_CONTEXT_PANE_WIDTH);
+
+      const resizeHandle = page.getByRole("separator", {
+        name: "调整音频上下文面板宽度",
+      });
+      await dragPaneDivider(page, "upper", 90);
+      await assertDockedGeometry(page, 1280, 720, 390);
+      await dragPaneDivider(page, "lower", 90);
+      await expect(resizeHandle).toHaveAttribute(
+        "aria-valuenow",
+        String(PRODUCT_CONTEXT_PANE_MAXIMUM),
+      );
+      await assertDockedGeometry(page, 1280, 720, PRODUCT_CONTEXT_PANE_MAXIMUM);
+
+      const collapseButton = page.getByRole("button", {
+        name: "收起音频上下文面板",
+      });
+      await collapseButton.click();
+      await assertRailOnlyGeometry(page, 1280, 720, true, 480);
+      await page.getByRole("button", { name: "打开音频上下文面板" }).click();
+      await assertDockedGeometry(page, 1280, 720, PRODUCT_CONTEXT_PANE_MAXIMUM);
+      await expect(
+        page.getByRole("complementary", { name: "音频上下文面板" }),
+      ).toBeVisible();
+
+      for (const target of [
+        { navigation: "互联", pane: "互联上下文面板" },
+        { navigation: "消息", pane: "消息上下文面板" },
+        { navigation: "设置", pane: "设置上下文面板" },
+        { navigation: "音频", pane: "音频上下文面板" },
+      ]) {
+        await page.getByRole("button", { name: target.navigation }).click();
+        await expect(
+          page.getByRole("complementary", { name: target.pane }),
+        ).toBeVisible();
+        await assertDockedGeometry(
+          page,
+          1280,
+          720,
+          PRODUCT_CONTEXT_PANE_MAXIMUM,
+        );
+      }
+
+      await resizeVisualWindow(session, 880, 720);
+      await assertDockedGeometry(page, 880, 720, 350);
+      await resizeVisualWindow(session, 1280, 720);
+      await assertDockedGeometry(page, 1280, 720, PRODUCT_CONTEXT_PANE_MAXIMUM);
+
+      await page.reload();
+      await page.waitForLoadState("networkidle");
+      await assertDockedGeometry(page, 1280, 720, PRODUCT_CONTEXT_PANE_WIDTH);
     });
   });
 
@@ -255,6 +429,7 @@ async function withVisualSession(
   const session = await launch(scenario, width, height);
   try {
     await run(session);
+    expect(session.rendererErrors).toEqual([]);
   } finally {
     await session.app.close();
   }
@@ -281,6 +456,25 @@ async function launch(
   });
   try {
     const page = await app.firstWindow();
+    const rendererErrors: string[] = [];
+    page.on("pageerror", (error) => rendererErrors.push(error.message));
+    page.on("console", (message) => {
+      if (message.type() !== "error") return;
+      const text = message.text();
+      // index.html:7 predates this change; Chromium rejects frame-ancestors in meta.
+      // Keep that known diagnostic visible without changing the product CSP here.
+      if (
+        text ===
+        "The Content Security Policy directive 'frame-ancestors' is ignored when delivered via a <meta> element."
+      ) {
+        test.info().annotations.push({
+          type: "known-console-diagnostic",
+          description: text,
+        });
+      } else {
+        rendererErrors.push(text);
+      }
+    });
     const electronRuntime = await app.evaluate(({ app: electronApp }) => ({
       electronVersion: process.versions.electron,
       chromiumVersion: process.versions.chrome,
@@ -330,6 +524,7 @@ async function launch(
       await window.loadURL(url);
     }, targetUrl);
     await page.waitForLoadState("networkidle");
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
     await app.evaluate(({ BrowserWindow }) => {
       const window = BrowserWindow.getAllWindows()[0];
       if (!window) throw new Error("Visual BrowserWindow is unavailable");
@@ -341,7 +536,7 @@ async function launch(
       if (!window) throw new Error("Visual BrowserWindow is unavailable");
       window.webContents.setZoomFactor(zoomFactor);
     }, 1 / nativeDpr);
-    return { app, page };
+    return { app, page, rendererErrors };
   } catch (error) {
     await app.close();
     throw error;
@@ -360,7 +555,11 @@ async function assertRuntimeContract(
     language: navigator.language,
     colorScheme: getComputedStyle(document.documentElement).colorScheme,
     reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
-    fontFamily: getComputedStyle(document.body).fontFamily,
+    fontFamily: getComputedStyle(document.body)
+      .fontFamily.split(",")
+      .slice(0, 3)
+      .map((family) => family.trim().replaceAll('"', "")),
+    interLoaded: document.fonts.check('14px "Inter Variable"'),
     frozenNow: Date.now(),
   }));
   expect(runtime).toEqual({
@@ -370,7 +569,8 @@ async function assertRuntimeContract(
     language: "zh-CN",
     colorScheme: "light",
     reducedMotion: true,
-    fontFamily: expectedFontStack,
+    fontFamily: ["Inter Variable", "Inter", "PingFang SC"],
+    interLoaded: true,
     frozenNow: Date.UTC(2026, 7, 19, 3, 20, 0),
   });
 }
@@ -379,31 +579,98 @@ async function assertDockedGeometry(
   page: Awaited<ReturnType<typeof launch>>["page"],
   width: number,
   height: number,
+  contextPaneWidth = PRODUCT_CONTEXT_PANE_WIDTH,
 ) {
+  const expandedPrefix =
+    PRIMARY_RAIL_WIDTH + contextPaneWidth + CONTEXT_PANE_BORDER_WIDTH;
+  await expect
+    .poll(async () => {
+      const geometry = await shellGeometry(page);
+      return Math.abs(geometry.gap.width - expandedPrefix);
+    })
+    .toBeLessThan(0.5);
   const geometry = await shellGeometry(page);
   expectRect(geometry.wrapper, { x: 0, y: 0, width, height });
-  expectHorizontalRect(geometry.gap, { x: 0, width: 48 });
-  expectRect(geometry.container, { x: 0, y: 0, width: 350, height });
-  expectRect(geometry.rail, { x: 0, y: 0, width: 49, height });
+  expectHorizontalRect(geometry.gap, { x: 0, width: expandedPrefix });
+  expectRect(geometry.container, {
+    x: 0,
+    y: 0,
+    width: expandedPrefix,
+    height,
+  });
+  expectRect(geometry.rail, {
+    x: 0,
+    y: 0,
+    width: PRIMARY_RAIL_WIDTH,
+    height,
+  });
   expectWithin(geometry.railContentWidth, 48);
   expectWithin(geometry.railBorderRight, 1);
   if (!geometry.pane) throw new Error("Expected a docked context pane");
-  expectRect(geometry.pane, { x: 49, y: 0, width: 301, height });
-  expectWithin(geometry.inset.x, 350);
-  expectWithin(geometry.inset.width, Math.max(0, width - 350));
+  expectRect(geometry.pane, {
+    x: PRIMARY_RAIL_WIDTH,
+    y: 0,
+    width: contextPaneWidth,
+    height,
+  });
+  if (!geometry.resizeHandle)
+    throw new Error("Expected a docked pane resize handle");
+  expectWithin(
+    geometry.resizeHandle.x + geometry.resizeHandle.width / 2,
+    expandedPrefix,
+  );
+  expectWithin(geometry.resizeHandleValue!, contextPaneWidth);
+  expectWithin(geometry.resizeHandleMinimum!, PRODUCT_CONTEXT_PANE_MINIMUM);
+  expectWithin(
+    geometry.resizeHandleMaximum!,
+    Math.max(
+      PRODUCT_CONTEXT_PANE_MINIMUM,
+      Math.min(
+        PRODUCT_CONTEXT_PANE_MAXIMUM,
+        width -
+          PRIMARY_RAIL_WIDTH -
+          CONTEXT_PANE_BORDER_WIDTH -
+          PRODUCT_MAIN_CONTENT_MINIMUM,
+      ),
+    ),
+  );
+  if (!geometry.midpointRail)
+    throw new Error("Expected a docked midpoint rail");
+  expectRect(geometry.midpointRail, {
+    x: expandedPrefix,
+    y: height / 2 - 24,
+    width: 28,
+    height: 48,
+  });
+  if (!geometry.upperResizeHitArea || !geometry.lowerResizeHitArea) {
+    throw new Error("Expected split pane resize hit areas");
+  }
+  expect(geometry.upperResizeHitArea.bottom).toBeLessThanOrEqual(
+    geometry.midpointRail.y,
+  );
+  expect(geometry.lowerResizeHitArea.y).toBeGreaterThanOrEqual(
+    geometry.midpointRail.bottom,
+  );
+  expectWithin(geometry.inset.x, expandedPrefix);
+  expectWithin(geometry.inset.width, Math.max(0, width - expandedPrefix));
+  expect(geometry.inset.width).toBeGreaterThanOrEqual(
+    PRODUCT_MAIN_CONTENT_MINIMUM,
+  );
 }
 
 async function assertRailOnlyGeometry(
   page: Awaited<ReturnType<typeof launch>>["page"],
   width: number,
   height: number,
+  collapsedPaneMounted = true,
+  contextPaneWidth = PRODUCT_CONTEXT_PANE_WIDTH,
 ) {
   await expect
     .poll(async () => {
       const geometry = await shellGeometry(page);
       return Math.abs(geometry.gap.width - 48);
     })
-    .toBeLessThanOrEqual(1);
+    .toBeLessThan(0.5);
   const geometry = await shellGeometry(page);
   expectRect(geometry.wrapper, { x: 0, y: 0, width, height });
   expectHorizontalRect(geometry.gap, { x: 0, width: 48 });
@@ -411,11 +678,136 @@ async function assertRailOnlyGeometry(
   expectRect(geometry.rail, { x: 0, y: 0, width: 49, height });
   expectWithin(geometry.railContentWidth, 48);
   expectWithin(geometry.railBorderRight, 1);
-  if (!geometry.pane)
-    throw new Error("Expected the collapsed pane to remain mounted");
-  expectRect(geometry.pane, { x: 49, y: 0, width: 0, height });
+  expect(geometry.resizeHandle).toBeNull();
+  if (collapsedPaneMounted) {
+    if (!geometry.pane)
+      throw new Error("Expected the collapsed pane to remain mounted");
+    expectRect(geometry.pane, {
+      x: PRIMARY_RAIL_WIDTH,
+      y: 0,
+      width: contextPaneWidth,
+      height,
+    });
+    if (!geometry.midpointRail)
+      throw new Error("Expected the collapsed midpoint rail to remain mounted");
+    expectRect(geometry.midpointRail, {
+      x: 48,
+      y: height / 2 - 24,
+      width: 28,
+      height: 48,
+    });
+  } else {
+    expect(geometry.pane).toBeNull();
+    expect(geometry.midpointRail).toBeNull();
+  }
   expectWithin(geometry.inset.x, 48);
   expectWithin(geometry.inset.width, width - 48);
+}
+
+async function assertReferenceChrome(
+  page: Awaited<ReturnType<typeof launch>>["page"],
+  paneOpen: boolean,
+  expectsSearch = true,
+) {
+  const geometry = await page.evaluate(() => {
+    const rect = (selector: string) => {
+      const element = document.querySelector<HTMLElement>(selector);
+      if (!element) return null;
+      const value = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        x: value.x,
+        y: value.y,
+        width: value.width,
+        height: value.height,
+        boxShadow: style.boxShadow,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        borderRadius: style.borderRadius,
+        paddingLeft: style.paddingLeft,
+        gap: style.gap,
+        marginLeft: style.marginLeft,
+        marginRight: style.marginRight,
+      };
+    };
+    return {
+      paneHead: rect("[data-context-pane-head]"),
+      contentHead: rect('[data-slot="sidebar-inset"] > header'),
+      searchBand: rect("[data-context-pane-search]"),
+      searchInput: rect("[data-context-pane-search] input"),
+      selectedFilter: rect(
+        '[data-context-pane-filters] button[aria-pressed="true"]',
+      ),
+      filtersBand: rect("[data-context-pane-filters]"),
+      title: rect(
+        '[data-slot="content-title"], [data-shell-slot="custom-title"] button:first-child, [data-shell-slot="custom-title"] h1, [data-shell-slot="custom-title"] input',
+      ),
+      separator: rect(
+        '[data-shell-slot="content-head"] [data-slot="separator"]',
+      ),
+      railStroke: rect('[data-slot="sidebar-rail-stroke"]'),
+      back: rect('button[aria-label="后退"]'),
+      avatar: rect('[data-shell-profile-placeholder="true"]'),
+      topPaneTriggerCount: document.querySelectorAll(
+        '[data-slot="sidebar-inset"] > header [aria-label*="上下文面板"]',
+      ).length,
+    };
+  });
+
+  expectWithin(geometry.contentHead!.height, 50);
+  expect(geometry.contentHead!.paddingLeft).toBe("16px");
+  expect(geometry.contentHead!.gap).toBe("6px");
+  expect(geometry.title!.fontSize).toBe("14px");
+  expect(geometry.title!.fontWeight).toBe("600");
+  expectWithin(geometry.separator!.height, 20);
+  expect(geometry.separator!.marginLeft).toBe("8px");
+  expect(geometry.separator!.marginRight).toBe("8px");
+  if (geometry.railStroke) {
+    expectWithin(geometry.railStroke.width, 2);
+    expectWithin(geometry.railStroke.height, 16);
+  } else if (paneOpen) {
+    throw new Error("Expected the midpoint rail stroke");
+  }
+  expectWithin(geometry.back!.width, 28);
+  expectWithin(geometry.back!.height, 28);
+  expectWithin(geometry.avatar!.width, 28);
+  expectWithin(geometry.avatar!.height, 28);
+  expect(geometry.topPaneTriggerCount).toBe(0);
+  for (const surface of [geometry.contentHead, geometry.back]) {
+    expectShadowless(surface!.boxShadow);
+  }
+  if (paneOpen) {
+    expectWithin(geometry.paneHead!.height, 50);
+    expectShadowless(geometry.paneHead!.boxShadow);
+  }
+  if (expectsSearch) {
+    expectWithin(geometry.searchBand!.height, 45);
+    expectWithin(geometry.searchInput!.x, PRIMARY_RAIL_WIDTH + 12);
+    expectWithin(geometry.searchInput!.width, PRODUCT_CONTEXT_PANE_WIDTH - 24);
+    expectWithin(geometry.searchInput!.height, 28);
+    expect(geometry.searchInput!.fontSize).toBe("12px");
+    expect(geometry.searchInput!.borderRadius).toBe("10px");
+    expect(geometry.searchInput!.paddingLeft).toBe("28px");
+    expectShadowless(geometry.searchInput!.boxShadow);
+    expectWithin(geometry.filtersBand!.height, 37);
+    expectWithin(geometry.selectedFilter!.height, 24);
+    expect(geometry.selectedFilter!.fontSize).toBe("12px");
+    expect(geometry.selectedFilter!.fontWeight).toBe("500");
+    expectShadowless(geometry.selectedFilter!.boxShadow);
+  } else {
+    expect(geometry.searchBand).toBeNull();
+  }
+}
+
+function expectShadowless(value: string) {
+  const transparentLayers = value
+    .split(/,\s*(?=rgba?\()/)
+    .every(
+      (layer) =>
+        layer === "none" ||
+        /^rgba\([^)]*,\s*0\)\s+0px\s+0px\s+0px\s+0px$/.test(layer),
+    );
+  expect(transparentLayers).toBe(true);
 }
 
 async function assertFlatRows(
@@ -432,12 +824,16 @@ async function assertFlatRows(
       return {
         borderRadius: style.borderRadius,
         boxShadow: style.boxShadow,
+        padding: style.padding,
+        gap: style.gap,
       };
     }),
   );
   for (const style of styles) {
     expect(parseFloat(style.borderRadius) || 0).toBeLessThanOrEqual(1);
     expect(style.boxShadow).toBe("none");
+    expect(style.padding).toBe("12px");
+    expect(style.gap).toBe("10px");
   }
 }
 
@@ -448,16 +844,29 @@ async function assertCaptureContainment(
   mustScroll: boolean,
 ) {
   const capture = page.getByRole("region", { name: "录制详情" });
+  const footer = page.locator('[data-shell-slot="content-footer"]');
+  await expect(footer).toBeVisible();
   const metrics = await capture.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     const style = getComputedStyle(element);
     const scrollContainer = element.closest<HTMLElement>("#main-content");
+    const footer = document.querySelector<HTMLElement>(
+      '[data-shell-slot="content-footer"]',
+    );
+    const footerRect = footer?.getBoundingClientRect();
+    const footerStyle = footer ? getComputedStyle(footer) : null;
     return {
       rect: toPlainRect(rect),
       position: style.position,
       boxShadow: style.boxShadow,
       containerClientHeight: scrollContainer?.clientHeight ?? 0,
       containerScrollHeight: scrollContainer?.scrollHeight ?? 0,
+      containerBottom: scrollContainer?.getBoundingClientRect().bottom ?? 0,
+      footer: footerRect ? toPlainRect(footerRect) : null,
+      footerBoxShadow: footerStyle?.boxShadow ?? null,
+      footerFlexWrap: footerStyle?.flexWrap ?? null,
+      footerClientWidth: footer?.clientWidth ?? 0,
+      footerScrollWidth: footer?.scrollWidth ?? 0,
     };
 
     function toPlainRect(value: DOMRect) {
@@ -476,6 +885,15 @@ async function assertCaptureContainment(
   expect(metrics.rect.y).toBeGreaterThanOrEqual(0);
   expect(metrics.position).not.toBe("fixed");
   expect(metrics.boxShadow).toBe("none");
+  if (!metrics.footer) throw new Error("Expected a capture footer");
+  expectWithin(metrics.footer.y, metrics.containerBottom);
+  expect(metrics.footer.right).toBeLessThanOrEqual(width);
+  expect(metrics.footer.bottom).toBeLessThanOrEqual(height);
+  expect(metrics.footerBoxShadow).toBe("none");
+  expect(metrics.footerFlexWrap).toBe("nowrap");
+  expect(metrics.footerScrollWidth).toBeLessThanOrEqual(
+    metrics.footerClientWidth,
+  );
   if (mustScroll) {
     expect(metrics.rect.width).toBeLessThanOrEqual(768);
     expect(metrics.containerScrollHeight).toBeGreaterThan(
@@ -483,8 +901,175 @@ async function assertCaptureContainment(
     );
   } else {
     expect(metrics.rect.bottom).toBeLessThanOrEqual(height);
-    expect(metrics.rect.height).toBeGreaterThan(0);
   }
+}
+
+async function assertAudioFirstUseDesktopGeometry(
+  page: Awaited<ReturnType<typeof launch>>["page"],
+) {
+  const geometry = await audioFirstUseGeometry(page);
+  const frameCenter = geometry.frame.x + geometry.frame.width / 2;
+  const mainCenter = geometry.main.x + geometry.main.width / 2;
+  const frameCenterRatio =
+    (geometry.frame.y + geometry.frame.height / 2 - geometry.main.y) /
+    geometry.main.height;
+
+  expectWithin(frameCenter, mainCenter, 2);
+  expect(frameCenterRatio).toBeGreaterThan(0.45);
+  expect(frameCenterRatio).toBeLessThan(0.55);
+  expectRect(geometry.frame, geometry.main);
+  expectMainPaddingRemoved(geometry.mainPadding);
+  expect(geometry.layout.width).toBeGreaterThanOrEqual(895);
+  expect(geometry.layout.width).toBeLessThanOrEqual(897);
+  expectWithin(geometry.content.width, geometry.layout.width / 2, 2);
+  expect(geometry.preview.x).toBeGreaterThanOrEqual(geometry.content.right);
+  expect(geometry.preview.x - geometry.content.right).toBeLessThanOrEqual(12);
+  expectWithin(geometry.preview.right, geometry.frame.right, 2);
+  expectWithin(geometry.previewSurface.x, geometry.preview.x);
+  expectWithin(geometry.previewSurface.y, geometry.preview.y);
+  expectWithin(geometry.previewSurface.right, geometry.frame.right);
+  expectWithin(geometry.previewSurface.bottom, geometry.frame.bottom);
+  expect(geometry.previewSurfaceBorders.top).toBeGreaterThan(0);
+  expect(geometry.previewSurfaceBorders.left).toBeGreaterThan(0);
+  expectWithin(geometry.previewSurfaceBorders.right, 0);
+  expectWithin(geometry.previewSurfaceBorders.bottom, 0);
+  expectWithin(geometry.primaryAction.y, geometry.importAction.y);
+  expect(geometry.previewFocusTargetCount).toBe(0);
+}
+
+async function assertAudioFirstUseMinimumGeometry(
+  page: Awaited<ReturnType<typeof launch>>["page"],
+) {
+  const geometry = await audioFirstUseGeometry(page);
+
+  expect(geometry.frame.width).toBeLessThan(1024);
+  expectRect(geometry.frame, geometry.main);
+  expectMainPaddingRemoved(geometry.mainPadding);
+  expectWithin(geometry.layout.width, geometry.frame.width);
+  expectWithin(geometry.content.width, geometry.layout.width);
+  expectWithin(geometry.content.bottom, geometry.preview.y);
+  expectWithin(geometry.preview.right, geometry.frame.right + 40, 2);
+  expect(geometry.previewSurface.width).toBeGreaterThanOrEqual(450);
+  expect(geometry.previewSurface.height).toBeGreaterThanOrEqual(360);
+  expect(geometry.previewSurfaceBorders.top).toBeGreaterThan(0);
+  expect(geometry.previewSurfaceBorders.left).toBeGreaterThan(0);
+  expectWithin(geometry.previewSurfaceBorders.right, 0);
+  expectWithin(geometry.previewSurfaceBorders.bottom, 0);
+  expect(geometry.frame.x).toBeGreaterThanOrEqual(geometry.main.x);
+  expect(geometry.frame.right).toBeLessThanOrEqual(geometry.main.right + 1);
+  expect(geometry.documentScrollWidth).toBeLessThanOrEqual(
+    geometry.documentClientWidth,
+  );
+  expect(geometry.mainScrollWidth).toBeLessThanOrEqual(
+    geometry.mainClientWidth,
+  );
+  expect(geometry.actionGroupScrollWidth).toBeLessThanOrEqual(
+    geometry.actionGroupClientWidth,
+  );
+  expect(geometry.primaryAction.right).toBeLessThanOrEqual(
+    geometry.actionGroup.right + 1,
+  );
+  expect(geometry.importAction.right).toBeLessThanOrEqual(
+    geometry.actionGroup.right + 1,
+  );
+  expect(geometry.previewFocusTargetCount).toBe(0);
+}
+
+async function audioFirstUseGeometry(
+  page: Awaited<ReturnType<typeof launch>>["page"],
+) {
+  await expect(page.locator('[data-shell-slot="content-head"]')).toHaveCount(0);
+  return await page.evaluate(() => {
+    const main = required("#main-content");
+    const frame = required('[data-audio-first-use="frame"]');
+    const layout = required('[data-audio-first-use="layout"]');
+    const content = required('[data-audio-first-use="content"]');
+    const preview = required('[data-audio-first-use="preview"]');
+    const previewSurface = required('[data-audio-first-use="preview-surface"]');
+    const primaryAction = button("开始录制");
+    const importAction = button("导入外部音频");
+    const actionGroup = required('[data-audio-first-use="actions"]');
+    const mainRect = main.getBoundingClientRect();
+    const mainStyle = getComputedStyle(main);
+    const previewRect = preview.getBoundingClientRect();
+    const previewSurfaceStyle = getComputedStyle(previewSurface);
+
+    return {
+      main: rect(main),
+      mainPadding: {
+        top: parseFloat(mainStyle.paddingTop),
+        right: parseFloat(mainStyle.paddingRight),
+        bottom: parseFloat(mainStyle.paddingBottom),
+        left: parseFloat(mainStyle.paddingLeft),
+      },
+      frame: rect(frame),
+      layout: rect(layout),
+      content: rect(content),
+      preview: rect(preview),
+      previewSurface: rect(previewSurface),
+      previewSurfaceBorders: {
+        top: parseFloat(previewSurfaceStyle.borderTopWidth),
+        right: parseFloat(previewSurfaceStyle.borderRightWidth),
+        bottom: parseFloat(previewSurfaceStyle.borderBottomWidth),
+        left: parseFloat(previewSurfaceStyle.borderLeftWidth),
+      },
+      actionGroup: rect(actionGroup),
+      primaryAction: rect(primaryAction),
+      importAction: rect(importAction),
+      documentClientWidth: document.documentElement.clientWidth,
+      documentScrollWidth: document.documentElement.scrollWidth,
+      mainClientWidth: main.clientWidth,
+      mainScrollWidth: main.scrollWidth,
+      mainClientHeight: main.clientHeight,
+      mainScrollHeight: main.scrollHeight,
+      previewReachableBottom:
+        previewRect.bottom - mainRect.top + main.scrollTop,
+      actionGroupClientWidth: actionGroup.clientWidth,
+      actionGroupScrollWidth: actionGroup.scrollWidth,
+      previewFocusTargetCount: preview.querySelectorAll(
+        'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      ).length,
+    };
+
+    function required(selector: string) {
+      const element = document.querySelector<HTMLElement>(selector);
+      if (!element)
+        throw new Error(`Missing audio first-use geometry target: ${selector}`);
+      return element;
+    }
+
+    function button(name: string) {
+      const element = Array.from(
+        content.querySelectorAll<HTMLButtonElement>("button"),
+      ).find((candidate) => candidate.textContent?.trim() === name);
+      if (!element) throw new Error(`Missing audio first-use action: ${name}`);
+      return element;
+    }
+
+    function rect(element: Element) {
+      const value = element.getBoundingClientRect();
+      return {
+        x: value.x,
+        y: value.y,
+        width: value.width,
+        height: value.height,
+        right: value.right,
+        bottom: value.bottom,
+      };
+    }
+  });
+}
+
+function expectMainPaddingRemoved(padding: {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}) {
+  expectWithin(padding.top, 0);
+  expectWithin(padding.right, 0);
+  expectWithin(padding.bottom, 0);
+  expectWithin(padding.left, 0);
 }
 
 async function shellGeometry(page: Awaited<ReturnType<typeof launch>>["page"]) {
@@ -503,6 +1088,18 @@ async function shellGeometry(page: Awaited<ReturnType<typeof launch>>["page"]) {
     const rail = nested[0]!;
     const pane = nested[1] ?? null;
     const inset = required(':scope > [data-slot="sidebar-inset"]', wrapper);
+    const midpointRail = wrapper.querySelector<HTMLElement>(
+      ':scope > [data-context-pane-midpoint-rail="true"]',
+    );
+    const resizeHandle = wrapper.querySelector<HTMLElement>(
+      ':scope > [data-slot="pane-resize-handle"]',
+    );
+    const upperResizeHitArea = resizeHandle?.querySelector<HTMLElement>(
+      '[data-pane-resize-hit-area="upper"]',
+    );
+    const lowerResizeHitArea = resizeHandle?.querySelector<HTMLElement>(
+      '[data-pane-resize-hit-area="lower"]',
+    );
     const railStyle = getComputedStyle(rail);
     return {
       wrapper: rect(wrapper),
@@ -510,6 +1107,19 @@ async function shellGeometry(page: Awaited<ReturnType<typeof launch>>["page"]) {
       container: rect(container),
       rail: rect(rail),
       pane: pane ? rect(pane) : null,
+      resizeHandle: resizeHandle ? rect(resizeHandle) : null,
+      upperResizeHitArea: upperResizeHitArea ? rect(upperResizeHitArea) : null,
+      lowerResizeHitArea: lowerResizeHitArea ? rect(lowerResizeHitArea) : null,
+      resizeHandleValue: resizeHandle
+        ? Number(resizeHandle.getAttribute("aria-valuenow"))
+        : null,
+      resizeHandleMinimum: resizeHandle
+        ? Number(resizeHandle.getAttribute("aria-valuemin"))
+        : null,
+      resizeHandleMaximum: resizeHandle
+        ? Number(resizeHandle.getAttribute("aria-valuemax"))
+        : null,
+      midpointRail: midpointRail ? rect(midpointRail) : null,
       inset: rect(inset),
       railContentWidth:
         rail.getBoundingClientRect().width -
@@ -538,6 +1148,51 @@ async function shellGeometry(page: Awaited<ReturnType<typeof launch>>["page"]) {
   });
 }
 
+async function dragPaneDivider(
+  page: Awaited<ReturnType<typeof launch>>["page"],
+  area: "upper" | "lower",
+  deltaX: number,
+) {
+  const hitArea = page.locator(`[data-pane-resize-hit-area="${area}"]`);
+  const box = await hitArea.boundingBox();
+  if (!box) throw new Error(`Expected the ${area} pane resize hit area`);
+  const point = {
+    x: box.x + box.width / 2,
+    y: area === "upper" ? box.y + box.height - 2 : box.y + 2,
+  };
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.mouse.move(point.x + deltaX, point.y);
+  await page.mouse.up();
+}
+
+async function resizeVisualWindow(
+  session: Awaited<ReturnType<typeof launch>>,
+  width: number,
+  height: number,
+) {
+  await session.app.evaluate(
+    ({ BrowserWindow, screen }, size) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      if (!window) throw new Error("Visual BrowserWindow is unavailable");
+      const scaleFactor = screen.getPrimaryDisplay().scaleFactor;
+      window.setContentSize(
+        Math.round(size.width / scaleFactor),
+        Math.round(size.height / scaleFactor),
+      );
+    },
+    { width, height },
+  );
+  await expect
+    .poll(() =>
+      session.page.evaluate(() => ({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      })),
+    )
+    .toEqual({ width, height });
+}
+
 function expectRect(
   actual: { x: number; y: number; width: number; height: number },
   expected: { x: number; y: number; width: number; height: number },
@@ -556,7 +1211,19 @@ function expectHorizontalRect(
   expectWithin(actual.width, expected.width);
 }
 
-function expectWithin(actual: number, expected: number, tolerance = 1) {
+function sortEvidenceKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortEvidenceKeys);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+        .map(([key, entry]) => [key, sortEvidenceKeys(entry)]),
+    );
+  }
+  return value;
+}
+
+function expectWithin(actual: number, expected: number, tolerance = 0.5) {
   expect(Math.abs(actual - expected)).toBeLessThanOrEqual(tolerance);
 }
 

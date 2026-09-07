@@ -15,7 +15,13 @@ import type {
   AudioWorkspaceSnapshot,
   PlaybackAction,
 } from "./audio_workspace";
-import type { CapturePreflight, CaptureSnapshot } from "./capture";
+import type {
+  CapturePreflight,
+  CaptureRecoveryItem,
+  CaptureSnapshot,
+  RenameCaptureSessionRequest,
+  SuggestCaptureTitleResponse,
+} from "./capture";
 import type { MicrophoneTestSnapshot } from "./capture";
 import type {
   FloatingCaptureControlRequest,
@@ -84,6 +90,8 @@ export const ipcChannels = {
   capturePreflight: "desktop.capture.preflight.v1",
   captureStart: "desktop.capture.start.v1",
   captureControl: "desktop.capture.control.v1",
+  captureTitleSuggest: "desktop.capture.title-suggest.v1",
+  captureSessionRename: "desktop.capture.session-rename.v1",
   captureRecoveryList: "desktop.capture.recovery-list.v1",
   captureRecoveryAction: "desktop.capture.recovery-action.v1",
   microphoneTestStart: "desktop.capture.microphone-test.start.v1",
@@ -399,6 +407,7 @@ export interface Voice2TextDesktopApi {
   }): Promise<CapturePreflight>;
   startCapture(options: {
     title: string;
+    refreshSuggestedTitle?: boolean;
     microphoneDeviceId?: string;
     captionEnabled: boolean;
     idempotencyKey: string;
@@ -408,7 +417,11 @@ export interface Voice2TextDesktopApi {
     sessionId: string;
     idempotencyKey: string;
   }): Promise<CaptureSnapshot>;
-  listCaptureRecoveries(): Promise<CaptureSnapshot[]>;
+  suggestCaptureTitle(): Promise<SuggestCaptureTitleResponse>;
+  renameCaptureSession(
+    options: RenameCaptureSessionRequest,
+  ): Promise<import("./application_state").ApplicationSnapshot>;
+  listCaptureRecoveries(): Promise<CaptureRecoveryItem[]>;
   actOnCaptureRecovery(options: {
     action: "keep" | "discard";
     sessionId: string;

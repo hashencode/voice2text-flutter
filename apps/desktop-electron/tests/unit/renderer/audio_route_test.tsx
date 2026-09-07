@@ -2,7 +2,7 @@
 
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
 import { AudioRouteFeature } from "../../../src/renderer/features/audios/audio-route-feature";
 import type {
@@ -26,12 +26,20 @@ const audioA = summary(1, "音频 A.wav");
 const audioB = summary(2, "音频 B.wav");
 const audioC = summary(3, "音频 C.wav");
 
-it("keeps import beside search and new recording in the fixed footer", async () => {
-  const onImport = vi.fn(async () => undefined);
+afterEach(() => {
+  window.localStorage.clear();
+  vi.restoreAllMocks();
+});
+
+it("renders the authoritative first-use state only after an empty list succeeds", async () => {
+  const onImport = vi.fn(async () => ({
+    protocolVersion: 2 as const,
+    state: "canceled" as const,
+  }));
   const onRecord = vi.fn();
   render(
     <AudioRouteFeature
-      api={api()}
+      api={api({ listAudios: vi.fn(async () => []) })}
       tasks={[]}
       pendingJobActions={new Map()}
       writable
@@ -43,72 +51,102 @@ it("keeps import beside search and new recording in the fixed footer", async () 
     />,
   );
 
-  const pane = screen.getByRole("region", { name: "音频列表" });
   const main = screen.getByRole("region", { name: "音频工作区" });
   expect(
-    await within(pane).findByRole("searchbox", { name: "搜索音频" }),
+    await within(main).findByRole("heading", {
+      name: "开始你的第一段音频",
+    }),
   ).toBeVisible();
+  expect(main).toHaveTextContent(
+    "录制一段新音频，或导入已有文件开始转写和整理。",
+  );
+  const frame = main.querySelector('[data-audio-first-use="frame"]');
+  expect(frame).toBeInTheDocument();
+  expect(frame).not.toHaveAttribute("data-slot", "card");
+  expect(frame?.querySelector('[data-slot="card"]')).not.toBeInTheDocument();
+  expect(
+    frame?.querySelector('[data-audio-first-use="content"]'),
+  ).toBeInTheDocument();
+  const preview = frame?.querySelector('[data-audio-first-use="preview"]');
+  expect(preview).toHaveAttribute("aria-hidden", "true");
+  expect(
+    preview?.querySelector('[data-audio-first-use="preview-surface"]'),
+  ).toBeEmptyDOMElement();
+  expect(
+    preview?.querySelectorAll(
+      'button, a, input, select, textarea, [tabindex], [contenteditable="true"]',
+    ),
+  ).toHaveLength(0);
+  expect(
+    screen.queryByRole("searchbox", { name: "搜索音频" }),
+  ).not.toBeInTheDocument();
   const user = userEvent.setup();
-  const importButton = within(pane).getByRole("button", {
-    name: "导入音频",
+  const importButton = within(main).getByRole("button", {
+    name: "导入外部音频",
   });
-  await user.hover(importButton);
-  expect(await screen.findByRole("tooltip")).toHaveTextContent("导入音频");
+  expect(importButton.querySelector("svg")).not.toBeInTheDocument();
   await user.click(importButton);
   expect(onImport).toHaveBeenCalledOnce();
-  expect(within(main).getByRole("combobox", { name: "麦克风" })).toBeVisible();
+  expect(
+    within(main).queryByRole("combobox", { name: "麦克风" }),
+  ).not.toBeInTheDocument();
   expect(within(main).getByRole("button", { name: "开始录制" })).toBeVisible();
   expect(
-    within(main).getByRole("button", { name: "测试麦克风" }),
-  ).toBeVisible();
-  expect(main).not.toHaveTextContent("导入");
-
-  expect(
-    pane.querySelector("[data-context-pane-fixed-footer]"),
+    within(main).queryByRole("button", { name: "测试麦克风" }),
   ).not.toBeInTheDocument();
-  expect(importButton).toHaveAccessibleName("导入音频");
-  expect(importButton).toHaveAttribute("data-variant", "ghost");
-  expect(importButton.querySelector("svg.lucide-file-input")).not.toBeNull();
-  expect(importButton).not.toHaveTextContent("导入音频");
-  expect(
-    within(pane).queryByRole("group", { name: "录音操作" }),
-  ).not.toBeInTheDocument();
-
   await userEvent
     .setup()
     .click(within(main).getByRole("button", { name: "开始录制" }));
-  expect(onRecord).toHaveBeenCalledWith("mic-default");
+  expect(onRecord).toHaveBeenCalledOnce();
+});
 
-  const list = within(pane).getByRole("list", { name: "音频列表" });
-  expect(list).toHaveAttribute("data-flat-row-list", "true");
-  expect(list).toHaveClass("border-b");
-  expect(list).not.toHaveClass("border-y");
-  const row = within(list).getByRole("button", { name: /打开 音频 A/ });
-  expect(row).toHaveAttribute("data-flat-row", "true");
-  expect(row).toHaveAttribute("data-slot", "item");
-  expect(row.querySelector('[data-slot="item-title"]')).toHaveClass(
-    "text-sm",
-    "leading-snug",
+it("keeps first-use write actions disabled when the workspace is read-only", async () => {
+  render(
+    <AudioRouteFeature
+      api={firstUseApi()}
+      tasks={[]}
+      pendingJobActions={new Map()}
+      writable={false}
+      paneOpen
+      onRecord={vi.fn()}
+      onImport={vi.fn()}
+      onCancel={vi.fn()}
+      onRetry={vi.fn()}
+    />,
   );
-  expect(row.querySelector('[data-slot="item-description"]')).toHaveClass(
-    "text-sm",
-  );
-  expect(row).not.toHaveClass("rounded-lg", "border", "bg-card");
 
-  await user.click(row);
-  const paneActions = await within(pane).findByRole("group", {
-    name: "录音操作",
-  });
-  const paneFooter = pane.querySelector<HTMLElement>(
-    "[data-context-pane-fixed-footer]",
+  expect(
+    await screen.findByRole("button", { name: "开始录制" }),
+  ).toBeDisabled();
+  expect(screen.getByRole("button", { name: "导入外部音频" })).toBeDisabled();
+  expect(
+    screen.queryByRole("button", { name: "测试麦克风" }),
+  ).not.toBeInTheDocument();
+});
+
+it("keeps first-use recording controls disabled during active recording", async () => {
+  render(
+    <AudioRouteFeature
+      api={firstUseApi()}
+      tasks={[]}
+      pendingJobActions={new Map()}
+      writable
+      paneOpen
+      recordingActive
+      onRecord={vi.fn()}
+      onImport={vi.fn()}
+      onCancel={vi.fn()}
+      onRetry={vi.fn()}
+    />,
   );
-  expect(paneFooter).toContainElement(paneActions);
-  expect(paneFooter).not.toContainElement(importButton);
-  const recordButton = await within(paneActions).findByRole("button", {
-    name: "新录音",
-  });
-  expect(importButton).toHaveAccessibleName("导入音频");
-  expect(recordButton).toHaveClass("w-full");
+
+  expect(
+    await screen.findByRole("button", { name: "开始录制" }),
+  ).toBeDisabled();
+  expect(screen.getByRole("button", { name: "导入外部音频" })).toBeEnabled();
+  expect(
+    screen.queryByRole("button", { name: "测试麦克风" }),
+  ).not.toBeInTheDocument();
 });
 
 it("allows recording and pure audio import without local processing", async () => {
@@ -116,7 +154,7 @@ it("allows recording and pure audio import without local processing", async () =
   const onProcessingUnavailable = vi.fn();
   render(
     <AudioRouteFeature
-      api={api()}
+      api={firstUseApi()}
       tasks={[]}
       pendingJobActions={new Map()}
       writable
@@ -133,7 +171,7 @@ it("allows recording and pure audio import without local processing", async () =
   expect(await screen.findByRole("button", { name: "开始录制" })).toBeEnabled();
   await userEvent
     .setup()
-    .click(screen.getByRole("button", { name: "导入音频" }));
+    .click(screen.getByRole("button", { name: "导入外部音频" }));
   expect(onProcessingUnavailable).not.toHaveBeenCalled();
   expect(onImport).toHaveBeenCalledOnce();
 });
@@ -266,7 +304,7 @@ it("disables new recording while capture recovery needs attention", async () => 
   expect(await screen.findByRole("button", { name: "新录音" })).toBeDisabled();
 });
 
-it("keeps search with the list and aligns loading with the empty state", async () => {
+it("keeps initial loading out of the list and first-use states", async () => {
   const listAudios = deferred<AudioSummary[]>();
   render(
     <AudioRouteFeature
@@ -282,40 +320,381 @@ it("keeps search with the list and aligns loading with the empty state", async (
     />,
   );
 
-  const pane = screen.getByRole("region", { name: "音频列表" });
-  const search = within(pane).getByRole("searchbox", { name: "搜索音频" });
-  const loading = await within(pane).findByRole("status", {
-    name: "正在载入音频列表",
+  const main = screen.getByRole("region", { name: "音频工作区" });
+  const loading = await within(main).findByRole("status", {
+    name: "正在加载音频",
   });
-  expect(loading.parentElement).toHaveClass(
-    "grid",
-    "flex-1",
-    "grid-rows-[1fr_auto_3fr]",
-  );
-  expect(loading).toHaveClass("row-start-2", "justify-center");
-  const loadingLayoutClassName = loading.parentElement?.className;
+  expect(loading).toHaveTextContent("正在加载音频…");
+  expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "导入外部音频" }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByText("开始你的第一段音频")).not.toBeInTheDocument();
+  expect(
+    main.querySelector('[data-audio-first-use="frame"]'),
+  ).not.toBeInTheDocument();
 
   await act(async () => listAudios.resolve([]));
 
-  const emptyHeading = await within(pane).findByRole("heading", {
-    name: "还没有音频",
+  expect(
+    await within(main).findByRole("heading", {
+      name: "开始你的第一段音频",
+    }),
+  ).toBeVisible();
+});
+
+it("shows only the workspace error and retry after an initial list failure", async () => {
+  const listAudios = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("raw /private/library failure"))
+    .mockResolvedValueOnce([audioA]);
+  renderRoute(api({ listAudios }));
+
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent("无法载入音频列表");
+  expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "导入外部音频" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "开始录制" }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByText("开始你的第一段音频")).not.toBeInTheDocument();
+  expect(
+    screen
+      .getByRole("region", { name: "音频工作区" })
+      .querySelector('[data-audio-first-use="frame"]'),
+  ).not.toBeInTheDocument();
+
+  await userEvent
+    .setup()
+    .click(within(alert).getByRole("button", { name: "重新载入" }));
+  expect(
+    await screen.findByRole("button", { name: /打开 音频 A/ }),
+  ).toBeVisible();
+});
+
+it("preserves a populated workspace during background refresh and query-empty", async () => {
+  const refresh = deferred<AudioSummary[]>();
+  const listAudios = vi
+    .fn()
+    .mockResolvedValueOnce([audioA])
+    .mockImplementationOnce(() => refresh.promise);
+  const props = {
+    api: api({ listAudios }),
+    tasks: [],
+    pendingJobActions: new Map<number, never>(),
+    writable: true,
+    paneOpen: true,
+    onRecord: vi.fn(),
+    onImport: vi.fn(),
+    onCancel: vi.fn(),
+    onRetry: vi.fn(),
+  };
+  const view = render(
+    <AudioRouteFeature {...props} libraryRefreshToken="ready:1" />,
+  );
+
+  const search = await screen.findByRole("searchbox", { name: "搜索音频" });
+  const populatedImport = screen.getByRole("button", { name: "导入音频" });
+  expect(populatedImport.querySelector("svg")).toBeInTheDocument();
+  expect(screen.getByText("选择一段音频")).toBeVisible();
+  expect(
+    screen
+      .getByRole("region", { name: "音频工作区" })
+      .querySelector('[data-audio-first-use="frame"]'),
+  ).not.toBeInTheDocument();
+  view.rerender(<AudioRouteFeature {...props} libraryRefreshToken="ready:2" />);
+  expect(await screen.findByText("正在刷新音频…")).toBeVisible();
+  expect(search).toBeVisible();
+  expect(screen.getByText("选择一段音频")).toBeVisible();
+
+  await act(async () => refresh.resolve([audioA]));
+  await userEvent.setup().type(search, "不存在");
+  expect(screen.getByText("没有匹配的音频")).toBeVisible();
+  expect(screen.getByText("选择一段音频")).toBeVisible();
+});
+
+it.each([true, false])(
+  "refreshes and selects the exact imported audio when inserted=%s",
+  async (inserted) => {
+    const listAudios = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([audioB]);
+    const openAudio = vi.fn(async () => workspace(audioB));
+    const onImport = vi.fn(async () => ({
+      protocolVersion: 2 as const,
+      state: "imported" as const,
+      audioId: audioB.audioId,
+      mediaSha256: "a".repeat(64),
+      inserted,
+    }));
+    render(
+      <AudioRouteFeature
+        api={api({ listAudios, openAudio })}
+        tasks={[]}
+        pendingJobActions={new Map()}
+        writable
+        paneOpen
+        onRecord={vi.fn()}
+        onImport={onImport}
+        onCancel={vi.fn()}
+        onRetry={vi.fn()}
+      />,
+    );
+
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: "导入外部音频" }));
+
+    expect(
+      await screen.findByRole("region", { name: "音频 B.wav 工作区" }),
+    ).toBeVisible();
+    expect(listAudios).toHaveBeenCalledTimes(2);
+    expect(openAudio).toHaveBeenCalledWith(audioB.audioId);
+  },
+);
+
+it("waits for a trailing authoritative refresh when import overlaps a list request", async () => {
+  const staleRefresh = deferred<AudioSummary[]>();
+  const listAudios = vi
+    .fn()
+    .mockResolvedValueOnce([audioA])
+    .mockImplementationOnce(() => staleRefresh.promise)
+    .mockResolvedValueOnce([audioA, audioB]);
+  const openAudio = vi.fn(async () => workspace(audioB));
+  const onImport = vi.fn(async () => ({
+    protocolVersion: 2 as const,
+    state: "imported" as const,
+    audioId: audioB.audioId,
+    mediaSha256: "a".repeat(64),
+    inserted: true,
+  }));
+  const props = {
+    api: api({ listAudios, openAudio }),
+    tasks: [],
+    pendingJobActions: new Map<number, never>(),
+    writable: true,
+    paneOpen: true,
+    onRecord: vi.fn(),
+    onImport,
+    onCancel: vi.fn(),
+    onRetry: vi.fn(),
+  };
+  const view = render(
+    <AudioRouteFeature {...props} libraryRefreshToken="ready:1" />,
+  );
+  await screen.findByRole("button", { name: /打开 音频 A/ });
+
+  view.rerender(<AudioRouteFeature {...props} libraryRefreshToken="ready:2" />);
+  await screen.findByText("正在刷新音频…");
+  await userEvent
+    .setup()
+    .click(screen.getByRole("button", { name: "导入音频" }));
+  await act(async () => staleRefresh.resolve([audioA]));
+
+  expect(
+    await screen.findByRole("region", { name: "音频 B.wav 工作区" }),
+  ).toBeVisible();
+  expect(screen.getByRole("button", { name: /打开 音频 B/ })).toBeVisible();
+  expect(listAudios).toHaveBeenCalledTimes(3);
+  expect(openAudio).toHaveBeenCalledWith(audioB.audioId);
+});
+
+it("keeps canceled imports in first-use and reports retryable failures there", async () => {
+  const onImport = vi
+    .fn()
+    .mockResolvedValueOnce({ protocolVersion: 2, state: "canceled" })
+    .mockRejectedValueOnce(new Error("raw /private/import failure"));
+  const listAudios = vi.fn(async () => []);
+  render(
+    <AudioRouteFeature
+      api={api({ listAudios })}
+      tasks={[]}
+      pendingJobActions={new Map()}
+      writable
+      paneOpen
+      onRecord={vi.fn()}
+      onImport={onImport}
+      onCancel={vi.fn()}
+      onRetry={vi.fn()}
+    />,
+  );
+
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "导入外部音频" }));
+  expect(screen.getByText("开始你的第一段音频")).toBeVisible();
+  expect(listAudios).toHaveBeenCalledTimes(1);
+  await user.click(screen.getByRole("button", { name: "导入外部音频" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "无法导入音频，请重试。",
+  );
+  expect(screen.queryByText(/private\/import/)).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "导入外部音频" })).toBeEnabled();
+});
+
+it("refreshes once when recording completes and never guesses an audio selection", async () => {
+  const listAudios = vi
+    .fn()
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([audioA]);
+  const openAudio = vi.fn();
+  const props = {
+    api: api({ listAudios, openAudio }),
+    tasks: [],
+    pendingJobActions: new Map<number, never>(),
+    writable: true,
+    paneOpen: true,
+    onRecord: vi.fn(),
+    onImport: vi.fn(),
+    onCancel: vi.fn(),
+    onRetry: vi.fn(),
+  };
+  const view = render(
+    <AudioRouteFeature {...props} recordingCompletionToken={null} />,
+  );
+  expect(await screen.findByText("开始你的第一段音频")).toBeVisible();
+
+  view.rerender(
+    <AudioRouteFeature
+      {...props}
+      recordingCompletionToken="capture-session-1"
+    />,
+  );
+  expect(await screen.findByText("选择一段音频")).toBeVisible();
+  expect(listAudios).toHaveBeenCalledTimes(2);
+  expect(openAudio).not.toHaveBeenCalled();
+  view.rerender(
+    <AudioRouteFeature
+      {...props}
+      recordingCompletionToken="capture-session-1"
+    />,
+  );
+  await waitFor(() => expect(listAudios).toHaveBeenCalledTimes(2));
+});
+
+it("queues an authoritative refresh when recording completes during a list request", async () => {
+  const staleList = deferred<AudioSummary[]>();
+  const listAudios = vi
+    .fn()
+    .mockImplementationOnce(() => staleList.promise)
+    .mockResolvedValueOnce([audioA]);
+  const props = {
+    api: api({ listAudios }),
+    tasks: [],
+    pendingJobActions: new Map<number, never>(),
+    writable: true,
+    paneOpen: true,
+    onRecord: vi.fn(),
+    onImport: vi.fn(),
+    onCancel: vi.fn(),
+    onRetry: vi.fn(),
+  };
+  const view = render(
+    <AudioRouteFeature {...props} recordingCompletionToken={null} />,
+  );
+  await waitFor(() => expect(listAudios).toHaveBeenCalledOnce());
+
+  view.rerender(
+    <AudioRouteFeature
+      {...props}
+      recordingCompletionToken="capture-session-while-loading"
+    />,
+  );
+  await act(async () => staleList.resolve([]));
+
+  expect(await screen.findByText("选择一段音频")).toBeVisible();
+  expect(listAudios).toHaveBeenCalledTimes(2);
+});
+
+it("recovers first-use recording after a failed microphone preflight", async () => {
+  const preflightCapture = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("raw /private/microphone failure"))
+    .mockResolvedValueOnce({
+      minimumMacosVersion: "13.0",
+      systemAudioMinimumMacosVersion: "13.0",
+      captureMode: "dual_track" as const,
+      systemAudioPermission: "granted" as const,
+      microphonePermission: "granted" as const,
+      microphones: [
+        { id: "mic-default", name: "MacBook 麦克风", isDefault: true },
+      ],
+      availableBytes: 8 * 1024 ** 3,
+      requiredBytes: 2 * 1024 ** 3,
+      captionModelAvailable: true,
+      canStart: true,
+      blockingReasons: [],
+    });
+  renderFirstUseRoute(api({ preflightCapture }));
+
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent("无法检查麦克风，请重试。");
+  expect(screen.queryByText(/private\/microphone/)).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "开始录制" })).toBeDisabled();
+  await userEvent
+    .setup()
+    .click(within(alert).getByRole("button", { name: "重试" }));
+
+  expect(await screen.findByRole("button", { name: "开始录制" })).toBeEnabled();
+  expect(preflightCapture).toHaveBeenNthCalledWith(2, {
+    requestPermissions: true,
+    captionEnabled: false,
   });
-  const empty = emptyHeading.parentElement!;
-  expect(search.closest('[data-slot="sidebar-group-content"]')).toBe(
-    empty.closest('[data-slot="sidebar-group-content"]'),
+});
+
+it("shows first-use preflight progress and keeps recording blocks effective", async () => {
+  const preflight =
+    deferred<Awaited<ReturnType<Voice2TextDesktopApi["preflightCapture"]>>>();
+  const onRecord = vi.fn();
+  render(
+    <AudioRouteFeature
+      api={firstUseApi({
+        preflightCapture: vi.fn(() => preflight.promise),
+      })}
+      tasks={[]}
+      pendingJobActions={new Map()}
+      writable
+      paneOpen
+      newRecordingBlocked
+      onRecord={onRecord}
+      onImport={vi.fn()}
+      onCancel={vi.fn()}
+      onRetry={vi.fn()}
+    />,
   );
-  expect(search.compareDocumentPosition(empty)).toBe(
-    Node.DOCUMENT_POSITION_FOLLOWING,
+
+  expect(
+    await screen.findByRole("button", { name: "正在检查麦克风…" }),
+  ).toBeDisabled();
+  await act(async () =>
+    preflight.resolve({
+      minimumMacosVersion: "13.0",
+      systemAudioMinimumMacosVersion: "13.0",
+      captureMode: "dual_track",
+      systemAudioPermission: "granted",
+      microphonePermission: "granted",
+      microphones: [
+        { id: "mic-default", name: "MacBook 麦克风", isDefault: true },
+      ],
+      availableBytes: 8 * 1024 ** 3,
+      requiredBytes: 2 * 1024 ** 3,
+      captionModelAvailable: true,
+      canStart: true,
+      blockingReasons: [],
+    }),
   );
-  expect(search.parentElement).not.toHaveClass("border-b");
-  expect(empty.parentElement).toHaveClass("flex", "h-full", "flex-col");
-  expect(empty).toHaveClass("min-h-0", "flex-1");
-  expect(loadingLayoutClassName).not.toBe(empty.parentElement?.className);
+
+  const start = await screen.findByRole("button", { name: "开始录制" });
+  expect(start).toBeDisabled();
+  await userEvent.setup().click(start);
+  expect(onRecord).not.toHaveBeenCalled();
 });
 
 it("disables recording when no microphone is available", async () => {
   const onRecord = vi.fn();
-  const desktop = api({
+  const desktop = firstUseApi({
     preflightCapture: vi.fn(async () => ({
       minimumMacosVersion: "13.0",
       systemAudioMinimumMacosVersion: "13.0",
@@ -348,350 +727,6 @@ it("disables recording when no microphone is available", async () => {
   expect(start).toBeDisabled();
   await userEvent.setup().click(start);
   expect(onRecord).not.toHaveBeenCalled();
-  await userEvent
-    .setup()
-    .click(await screen.findByRole("button", { name: /打开 音频 A/ }));
-  expect(screen.getByRole("button", { name: "新录音" })).toBeDisabled();
-});
-
-it("uses the native capture lifecycle for a user-ended microphone test", async () => {
-  const running = {
-    testId: "mic-test-123456789012",
-    state: "running" as const,
-    elapsedMs: 1_000,
-    normalizedRMS: 0.1,
-    normalizedPeak: 0.5,
-    observedFrames: 10,
-    observedSound: true,
-  };
-  const startMicrophoneTest = vi.fn(async () => running);
-  const finishMicrophoneTest = vi.fn(async () => ({
-    ...running,
-    state: "finished" as const,
-    reason: "detected" as const,
-  }));
-  render(
-    <AudioRouteFeature
-      api={api({ startMicrophoneTest, finishMicrophoneTest })}
-      tasks={[]}
-      pendingJobActions={new Map()}
-      writable
-      paneOpen
-      onRecord={vi.fn()}
-      onImport={vi.fn()}
-      onCancel={vi.fn()}
-      onRetry={vi.fn()}
-    />,
-  );
-  await userEvent
-    .setup()
-    .click(await screen.findByRole("button", { name: "测试麦克风" }));
-  const instructions = await screen.findByRole("dialog", {
-    name: "测试麦克风",
-  });
-  expect(instructions).toHaveTextContent("开始后，请对着麦克风说话。");
-  expect(instructions).not.toHaveTextContent("测试由你结束");
-  expect(instructions).not.toHaveTextContent("30 秒");
-  await userEvent
-    .setup()
-    .click(within(instructions).getByRole("button", { name: "开始测试" }));
-  const testingDialog = await screen.findByRole("dialog", {
-    name: "正在测试麦克风",
-  });
-  expect(within(testingDialog).getByRole("meter")).toHaveAttribute(
-    "aria-valuenow",
-    "50",
-  );
-  expect(testingDialog).toHaveTextContent("已收到声音");
-  await userEvent
-    .setup()
-    .click(within(testingDialog).getByRole("button", { name: "结束测试" }));
-  await waitFor(() =>
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-  );
-  expect(screen.queryByText("麦克风测试完成")).not.toBeInTheDocument();
-  expect(startMicrophoneTest).toHaveBeenCalledWith({
-    microphoneDeviceId: "mic-default",
-  });
-  expect(finishMicrophoneTest).toHaveBeenCalledWith(running.testId);
-});
-
-it("cancels a late microphone start exactly once after the dialog closes", async () => {
-  const pendingStart =
-    deferred<
-      Awaited<ReturnType<Voice2TextDesktopApi["startMicrophoneTest"]>>
-    >();
-  const cancelMicrophoneTest = vi.fn(async (testId: string) => ({
-    testId,
-    state: "cancelled" as const,
-    elapsedMs: 0,
-    normalizedRMS: 0,
-    normalizedPeak: 0,
-    observedFrames: 0,
-    observedSound: false,
-  }));
-  render(
-    <AudioRouteFeature
-      api={api({
-        startMicrophoneTest: vi.fn(() => pendingStart.promise),
-        cancelMicrophoneTest,
-      })}
-      tasks={[]}
-      pendingJobActions={new Map()}
-      writable
-      paneOpen
-      onRecord={vi.fn()}
-      onImport={vi.fn()}
-      onCancel={vi.fn()}
-      onRetry={vi.fn()}
-    />,
-  );
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole("button", { name: "测试麦克风" }));
-  await user.click(screen.getByRole("button", { name: "开始测试" }));
-  const starting = await screen.findByRole("dialog", {
-    name: "正在测试麦克风",
-  });
-  expect(starting).toHaveTextContent("正在连接麦克风…");
-  expect(
-    within(starting).queryByRole("button", { name: "结束测试" }),
-  ).not.toBeInTheDocument();
-  await user.click(within(starting).getByRole("button", { name: "取消" }));
-  expect(screen.getByRole("button", { name: "测试麦克风" })).toBeDisabled();
-  pendingStart.resolve({
-    testId: "mic-test-late-start-123456",
-    state: "running",
-    elapsedMs: 0,
-    normalizedRMS: 0,
-    normalizedPeak: 0,
-    observedFrames: 0,
-    observedSound: false,
-  });
-  await waitFor(() =>
-    expect(cancelMicrophoneTest).toHaveBeenCalledWith(
-      "mic-test-late-start-123456",
-    ),
-  );
-  expect(cancelMicrophoneTest).toHaveBeenCalledOnce();
-  expect(screen.getByRole("button", { name: "测试麦克风" })).toBeEnabled();
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-});
-
-it("cancels once and ignores a late running snapshot after closing during recovery", async () => {
-  const running = {
-    testId: "mic-test-recovery-close-123456",
-    state: "running" as const,
-    elapsedMs: 0,
-    normalizedRMS: 0,
-    normalizedPeak: 0,
-    observedFrames: 0,
-    observedSound: false,
-  };
-  const pendingRecovery = deferred<typeof running>();
-  const cancelMicrophoneTest = vi.fn(async () => ({
-    ...running,
-    state: "cancelled" as const,
-  }));
-  const getMicrophoneTestSnapshot = vi.fn(() => pendingRecovery.promise);
-  render(
-    <AudioRouteFeature
-      api={api({
-        startMicrophoneTest: vi.fn(async () => running),
-        getMicrophoneTestSnapshot,
-        cancelMicrophoneTest,
-      })}
-      tasks={[]}
-      pendingJobActions={new Map()}
-      writable
-      paneOpen
-      onRecord={vi.fn()}
-      onImport={vi.fn()}
-      onCancel={vi.fn()}
-      onRetry={vi.fn()}
-    />,
-  );
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole("button", { name: "测试麦克风" }));
-  await user.click(screen.getByRole("button", { name: "开始测试" }));
-  const testing = await screen.findByRole("dialog", {
-    name: "正在测试麦克风",
-  });
-  await waitFor(() => expect(getMicrophoneTestSnapshot).toHaveBeenCalledOnce());
-  await user.click(within(testing).getByRole("button", { name: "关闭" }));
-  pendingRecovery.resolve({
-    ...running,
-    elapsedMs: 500,
-    normalizedPeak: 0.7,
-    observedFrames: 4_096,
-    observedSound: true,
-  });
-
-  await waitFor(() => expect(cancelMicrophoneTest).toHaveBeenCalledOnce());
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(screen.queryByText("已收到声音")).not.toBeInTheDocument();
-});
-
-it("shows helper contract failures with one close action and no settings affordance", async () => {
-  const openMicrophoneSettings = vi.fn();
-  render(
-    <AudioRouteFeature
-      api={api({
-        startMicrophoneTest: vi.fn(async () => ({
-          testId: "mic-test-helper-mismatch-123456",
-          state: "failed" as const,
-          reason: "native-helper-failed" as const,
-          elapsedMs: 0,
-          normalizedRMS: 0,
-          normalizedPeak: 0,
-          observedFrames: 0,
-          observedSound: false,
-        })),
-        openMicrophoneSettings,
-      })}
-      tasks={[]}
-      pendingJobActions={new Map()}
-      writable
-      paneOpen
-      onRecord={vi.fn()}
-      onImport={vi.fn()}
-      onCancel={vi.fn()}
-      onRetry={vi.fn()}
-    />,
-  );
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole("button", { name: "测试麦克风" }));
-  await user.click(screen.getByRole("button", { name: "开始测试" }));
-
-  const failure = await screen.findByRole("dialog", {
-    name: "麦克风测试失败",
-  });
-  expect(failure).toHaveTextContent("麦克风测试暂不可用，请重启应用。");
-  expect(
-    within(failure)
-      .getAllByRole("button")
-      .map((button) => button.getAttribute("aria-label") ?? button.textContent),
-  ).toEqual(["知道了"]);
-  expect(within(failure).getByRole("button", { name: "知道了" })).toBeVisible();
-  expect(
-    within(failure).queryByRole("button", { name: "前往麦克风设置" }),
-  ).not.toBeInTheDocument();
-  expect(openMicrophoneSettings).not.toHaveBeenCalled();
-});
-
-it("shows typed silence failure and the fixed settings fallback path", async () => {
-  const running = {
-    testId: "mic-test-silent-12345678",
-    state: "running" as const,
-    elapsedMs: 31_000,
-    normalizedRMS: 0,
-    normalizedPeak: 0,
-    observedFrames: 100,
-    observedSound: false,
-  };
-  const openMicrophoneSettings = vi.fn(async () => ({
-    state: "failed" as const,
-  }));
-  render(
-    <AudioRouteFeature
-      api={api({
-        startMicrophoneTest: vi.fn(async () => running),
-        finishMicrophoneTest: vi.fn(async () => ({
-          ...running,
-          state: "finished" as const,
-          reason: "no-sound-observed" as const,
-        })),
-        openMicrophoneSettings,
-      })}
-      tasks={[]}
-      pendingJobActions={new Map()}
-      writable
-      paneOpen
-      onRecord={vi.fn()}
-      onImport={vi.fn()}
-      onCancel={vi.fn()}
-      onRetry={vi.fn()}
-    />,
-  );
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole("button", { name: "测试麦克风" }));
-  await user.click(screen.getByRole("button", { name: "开始测试" }));
-  await user.click(
-    within(
-      await screen.findByRole("dialog", { name: "正在测试麦克风" }),
-    ).getByRole("button", { name: "结束测试" }),
-  );
-  const failure = await screen.findByRole("dialog", {
-    name: "未检测到麦克风输入",
-  });
-  expect(failure).not.toHaveTextContent("31");
-  await user.click(
-    within(failure).getByRole("button", { name: "前往麦克风设置" }),
-  );
-  expect(
-    await within(failure).findByText(
-      "请手动前往：系统设置 → 隐私与安全 → 麦克风",
-    ),
-  ).toBeVisible();
-  expect(openMicrophoneSettings).toHaveBeenCalledOnce();
-  expect(
-    within(failure).getByRole("button", { name: "前往麦克风设置" }),
-  ).toBeVisible();
-});
-
-it("reports an unavailable microphone in a dialog", async () => {
-  render(
-    <AudioRouteFeature
-      api={api({
-        preflightCapture: vi.fn(async () => ({
-          minimumMacosVersion: "13.0",
-          systemAudioMinimumMacosVersion: "13.0",
-          captureMode: "system_audio_only" as const,
-          systemAudioPermission: "granted" as const,
-          microphonePermission: "denied" as const,
-          microphones: [],
-          availableBytes: 8 * 1024 ** 3,
-          requiredBytes: 2 * 1024 ** 3,
-          captionModelAvailable: true,
-          canStart: true,
-          blockingReasons: [],
-        })),
-      })}
-      tasks={[]}
-      pendingJobActions={new Map()}
-      writable
-      paneOpen
-      onRecord={vi.fn()}
-      onImport={vi.fn()}
-      onCancel={vi.fn()}
-      onRetry={vi.fn()}
-    />,
-  );
-
-  const testMicrophone = await screen.findByRole("button", {
-    name: "测试麦克风",
-  });
-  await waitFor(() => expect(testMicrophone).toBeEnabled());
-  await userEvent.setup().click(testMicrophone);
-
-  const instructions = await screen.findByRole("dialog", {
-    name: "测试麦克风",
-  });
-  await userEvent
-    .setup()
-    .click(within(instructions).getByRole("button", { name: "开始测试" }));
-
-  const dialog = await screen.findByRole("dialog", {
-    name: "麦克风测试失败",
-  });
-  expect(
-    within(dialog).getByRole("heading", { name: "麦克风测试失败" }),
-  ).toBeVisible();
-  expect(
-    within(dialog).getAllByText("没有麦克风权限，请在系统设置中允许访问。"),
-  ).toHaveLength(1);
-  expect(
-    within(dialog).getByRole("button", { name: "前往麦克风设置" }),
-  ).toBeVisible();
 });
 
 it("filters Audio summaries and projects every non-completed processing state", async () => {
@@ -730,7 +765,12 @@ it("filters Audio summaries and projects every non-completed processing state", 
     />,
   );
 
-  await screen.findByRole("button", { name: /打开 音频 1/ });
+  const firstRow = await screen.findByRole("button", { name: /打开 音频 1/ });
+  expect(firstRow).toHaveAttribute("data-variant", "context");
+  const allFilter = screen.getByRole("button", { name: "全部 6" });
+  expect(allFilter).toHaveAttribute("data-variant", "filter");
+  expect(allFilter).toHaveAttribute("aria-pressed", "true");
+  expect(allFilter.querySelector('[data-slot="badge"]')).toHaveTextContent("6");
   for (const label of [
     "等待处理",
     "正在处理",
@@ -742,6 +782,7 @@ it("filters Audio summaries and projects every non-completed processing state", 
     expect(screen.getByText(label, { selector: "span" })).toBeVisible();
   }
   const search = screen.getByRole("searchbox", { name: "搜索音频" });
+  expect(search).toHaveAttribute("data-variant", "context-search");
   await userEvent.setup().type(search, "音频 4");
   expect(screen.getByRole("button", { name: /打开 音频 4/ })).toBeVisible();
   expect(
@@ -1092,6 +1133,15 @@ function renderRoute(desktop: Voice2TextDesktopApi) {
   );
 }
 
+function renderFirstUseRoute(desktop: Voice2TextDesktopApi) {
+  return renderRoute(
+    api({
+      ...desktop,
+      listAudios: vi.fn(async () => []),
+    }),
+  );
+}
+
 function summary(audioId: number, displayName: string): AudioSummary {
   return {
     audioId,
@@ -1182,4 +1232,11 @@ function api(overrides: Partial<Voice2TextDesktopApi> = {}) {
     exportAudio: vi.fn(async () => ({ state: "canceled" as const })),
     ...overrides,
   } as unknown as Voice2TextDesktopApi;
+}
+
+function firstUseApi(overrides: Partial<Voice2TextDesktopApi> = {}) {
+  return api({
+    listAudios: vi.fn(async () => []),
+    ...overrides,
+  });
 }

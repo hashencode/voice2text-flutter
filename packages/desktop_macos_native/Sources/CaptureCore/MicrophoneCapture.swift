@@ -215,11 +215,14 @@ enum MicrophonePCMBufferMeter {
 
 struct MicrophoneMeterAccumulator {
   private let retentionNanoseconds: UInt64
-  private var windowStartedAt: UInt64?
-  private var maximumRMS = 0.0
-  private var maximumPeak = 0.0
+  private var lastRecordedAt: UInt64?
+  private var pendingMaximumRMS = 0.0
+  private var pendingMaximumPeak = 0.0
+  private var hasPendingSamples = false
+  private var retainedRMS = 0.0
+  private var retainedPeak = 0.0
 
-  init(retentionNanoseconds: UInt64 = 250_000_000) {
+  init(retentionNanoseconds: UInt64 = 750_000_000) {
     self.retentionNanoseconds = retentionNanoseconds
   }
 
@@ -228,33 +231,40 @@ struct MicrophoneMeterAccumulator {
     normalizedPeak: Double,
     at timestamp: UInt64
   ) {
-    if windowStartedAt == nil {
-      windowStartedAt = timestamp
-    }
-    maximumRMS = max(maximumRMS, min(1, max(0, normalizedRMS)))
-    maximumPeak = max(maximumPeak, min(1, max(0, normalizedPeak)))
+    lastRecordedAt = timestamp
+    hasPendingSamples = true
+    pendingMaximumRMS = max(pendingMaximumRMS, min(1, max(0, normalizedRMS)))
+    pendingMaximumPeak = max(pendingMaximumPeak, min(1, max(0, normalizedPeak)))
   }
 
   mutating func consume(at timestamp: UInt64) -> (
     normalizedRMS: Double,
     normalizedPeak: Double
   ) {
-    guard let windowStartedAt,
-      timestamp >= windowStartedAt,
-      timestamp - windowStartedAt <= retentionNanoseconds
+    guard let lastRecordedAt,
+      timestamp >= lastRecordedAt,
+      timestamp - lastRecordedAt <= retentionNanoseconds
     else {
       reset()
       return (0, 0)
     }
-    let result = (maximumRMS, maximumPeak)
-    reset()
-    return result
+    if hasPendingSamples {
+      retainedRMS = pendingMaximumRMS
+      retainedPeak = pendingMaximumPeak
+      pendingMaximumRMS = 0
+      pendingMaximumPeak = 0
+      hasPendingSamples = false
+    }
+    return (retainedRMS, retainedPeak)
   }
 
-  private mutating func reset() {
-    windowStartedAt = nil
-    maximumRMS = 0
-    maximumPeak = 0
+  mutating func reset() {
+    lastRecordedAt = nil
+    pendingMaximumRMS = 0
+    pendingMaximumPeak = 0
+    hasPendingSamples = false
+    retainedRMS = 0
+    retainedPeak = 0
   }
 }
 
@@ -822,6 +832,9 @@ final class MicrophoneCapture: @unchecked Sendable {
       if self.engine.isRunning {
         self.engine.pause()
       }
+      self.meterLock.lock()
+      self.meterAccumulator.reset()
+      self.meterLock.unlock()
     }
     if DispatchQueue.getSpecific(key: recoveryQueueKey) == 1 {
       action()

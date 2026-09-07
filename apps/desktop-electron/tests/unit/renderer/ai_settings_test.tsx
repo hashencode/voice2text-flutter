@@ -99,8 +99,11 @@ describe("cloud model settings", () => {
   it("uses provider color for selection without locking the selected profile", async () => {
     render(<AiSettingsFeature api={api()} settingsPage />);
     expect(
-      await screen.findByRole("heading", { name: "云端模型" }),
+      await screen.findByRole("region", { name: "云端模型" }),
     ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "云端模型" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "新增云端模型" })).toBeVisible();
     expect(screen.getByText("deepseek-chat")).toBeVisible();
     expect(screen.getByText("team-chat")).toBeVisible();
@@ -322,6 +325,14 @@ describe("cloud model settings", () => {
     await user.click(
       within(dialog).getByRole("combobox", { name: "接口类型" }),
     );
+    expect(
+      document.querySelector('[data-slot="select-content"]'),
+    ).toHaveAttribute("data-align", "end");
+    expect(
+      document.querySelector(
+        '[data-slot="select-content"] [data-position="popper"]',
+      ),
+    ).toHaveAttribute("data-position", "popper");
     await user.click(
       await screen.findByRole("option", { name: "OpenAI-compatible" }),
     );

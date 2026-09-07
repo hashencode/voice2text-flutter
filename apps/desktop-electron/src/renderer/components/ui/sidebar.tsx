@@ -163,6 +163,7 @@ function Sidebar({
   collapsible = "offcanvas",
   mobileMode = "sheet",
   overlayContent = false,
+  suppressTransitionKey,
   className,
   children,
   ...props
@@ -172,8 +173,29 @@ function Sidebar({
   collapsible?: "offcanvas" | "icon" | "none";
   mobileMode?: "sheet" | "inline";
   overlayContent?: boolean;
+  suppressTransitionKey?: React.Key;
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
+  const gapRef = React.useRef<HTMLDivElement>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const previousSuppressionKeyRef = React.useRef(suppressTransitionKey);
+
+  React.useLayoutEffect(() => {
+    if (Object.is(previousSuppressionKeyRef.current, suppressTransitionKey))
+      return;
+    previousSuppressionKeyRef.current = suppressTransitionKey;
+    const targets = [gapRef.current, containerRef.current].filter(
+      (target): target is HTMLDivElement => target !== null,
+    );
+    const previousTransitions = targets.map(
+      (target) => target.style.transition,
+    );
+    for (const target of targets) target.style.transition = "none";
+    void gapRef.current?.offsetWidth;
+    targets.forEach((target, index) => {
+      target.style.transition = previousTransitions[index] ?? "";
+    });
+  }, [suppressTransitionKey]);
 
   if (collapsible === "none") {
     return (
@@ -229,21 +251,25 @@ function Sidebar({
     >
       {/* This is what handles the sidebar gap on desktop */}
       <div
+        ref={gapRef}
         data-slot="sidebar-gap"
         className={cn(
           "relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear",
+          "group-data-[resizing=true]/sidebar-wrapper:transition-none",
           "group-data-[collapsible=offcanvas]:w-0",
           "group-data-[side=right]:rotate-180",
           variant === "floating" || variant === "inset"
             ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]"
             : "group-data-[collapsible=icon]:w-(--sidebar-width-icon)",
-          overlayContent && "!w-(--sidebar-width-icon)",
+          overlayContent && "!w-[calc(var(--sidebar-width-icon)+1px)]",
         )}
       />
       <div
+        ref={containerRef}
         data-slot="sidebar-container"
         className={cn(
           "fixed inset-y-0 z-10 h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear",
+          "group-data-[resizing=true]/sidebar-wrapper:transition-none",
           mobileMode === "inline" ? "flex" : "hidden md:flex",
           side === "left"
             ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
@@ -252,6 +278,8 @@ function Sidebar({
           variant === "floating" || variant === "inset"
             ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
             : "group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l",
+          overlayContent &&
+            "group-data-[collapsible=icon]:!w-[calc(var(--sidebar-width-icon)+1px)]",
           className,
         )}
         {...props}
@@ -297,28 +325,51 @@ function SidebarTrigger({
   );
 }
 
-function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
+function SidebarRail({
+  className,
+  variant = "edge",
+  children,
+  ...props
+}: React.ComponentProps<"button"> & { variant?: "edge" | "handle" }) {
   const { toggleSidebar } = useSidebar();
 
   return (
     <button
       data-sidebar="rail"
       data-slot="sidebar-rail"
+      data-variant={variant}
       aria-label="Toggle Sidebar"
       tabIndex={-1}
       onClick={toggleSidebar}
       title="Toggle Sidebar"
       className={cn(
-        "absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear group-data-[side=left]:-right-4 group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex",
-        "in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize",
-        "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
-        "group-data-[collapsible=offcanvas]:translate-x-0 group-data-[collapsible=offcanvas]:after:left-full hover:group-data-[collapsible=offcanvas]:bg-sidebar",
-        "[[data-side=left][data-collapsible=offcanvas]_&]:-right-2",
-        "[[data-side=right][data-collapsible=offcanvas]_&]:-left-2",
+        variant === "handle"
+          ? "group/rail absolute top-1/2 z-40 flex h-12 w-7 -translate-y-1/2 cursor-pointer items-center pl-2 outline-none focus-visible:rounded-md focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+          : cn(
+              "absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear group-data-[side=left]:-right-4 group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex",
+              "in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize",
+              "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
+              "group-data-[collapsible=offcanvas]:translate-x-0 group-data-[collapsible=offcanvas]:after:left-full hover:group-data-[collapsible=offcanvas]:bg-sidebar",
+              "[[data-side=left][data-collapsible=offcanvas]_&]:-right-2",
+              "[[data-side=right][data-collapsible=offcanvas]_&]:-left-2",
+            ),
         className,
       )}
       {...props}
-    />
+    >
+      {variant === "handle" ? (
+        <span
+          data-slot="sidebar-rail-stroke"
+          aria-hidden="true"
+          className="flex flex-col items-center"
+        >
+          <span className="block h-2 w-0.5 origin-bottom rounded-t-full bg-foreground/40 transition-transform duration-100 group-hover/rail:-rotate-40 group-hover/rail:bg-foreground/60 group-aria-expanded/rail:group-hover/rail:rotate-40 motion-reduce:transition-none" />
+          <span className="block h-2 w-0.5 origin-top rounded-b-full bg-foreground/40 transition-transform duration-100 group-hover/rail:rotate-40 group-hover/rail:bg-foreground/60 group-aria-expanded/rail:group-hover/rail:-rotate-40 motion-reduce:transition-none" />
+        </span>
+      ) : (
+        children
+      )}
+    </button>
   );
 }
 

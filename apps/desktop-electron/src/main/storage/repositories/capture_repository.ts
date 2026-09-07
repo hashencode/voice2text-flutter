@@ -2,7 +2,10 @@ import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
 import {
+  captureRecoveryItemSchema,
   captureSnapshotSchema,
+  captureTitleSchema,
+  type CaptureRecoveryItem,
   type CaptureSnapshot,
 } from "../../../shared/contracts";
 import { withTransaction } from "../audio_database";
@@ -23,6 +26,11 @@ interface CaptureSessionRow {
   interruption_reason: string | null;
   recording_sha256: string | null;
   journal_sha256: string | null;
+}
+
+export interface StoredCaptureSession {
+  snapshot: CaptureSnapshot;
+  title: string;
 }
 
 export class CaptureRepository {
@@ -63,6 +71,25 @@ export class CaptureRepository {
     ) {
       throw new Error("capture session identity conflict");
     }
+  }
+
+  countSessionsCreatedBetween(startMs: number, endMs: number): number {
+    if (
+      !Number.isSafeInteger(startMs) ||
+      !Number.isSafeInteger(endMs) ||
+      startMs < 0 ||
+      endMs <= startMs
+    ) {
+      throw new Error("capture session count range is invalid");
+    }
+    return Number(
+      this.database
+        .prepare(
+          `SELECT COUNT(*) AS count FROM capture_sessions
+           WHERE created_at_ms >= ? AND created_at_ms < ?`,
+        )
+        .get(startMs, endMs)?.count ?? 0,
+    );
   }
 
   hasActionReceipt(sessionId: string, action: string): boolean {
@@ -123,6 +150,11 @@ export class CaptureRepository {
       const changes = this.database
         .prepare(
           `UPDATE capture_sessions SET
+            title = CASE
+              WHEN state <> 'recoverable' AND ? = 'recoverable'
+                THEN 'Recover-' || title
+              ELSE title
+            END,
             state = ?, capture_mode = ?, capture_timeline_ms = ?,
             system_audio_healthy = ?, microphone_healthy = ?, partial_capture = ?,
             finalized_chunk_count = ?, event_count = ?, gap_count = ?,
@@ -131,6 +163,7 @@ export class CaptureRepository {
           WHERE session_id = ? AND recovery_disposition IS NULL`,
         )
         .run(
+          value.state,
           value.state,
           value.captureMode,
           value.captureTimelineMs,
@@ -168,7 +201,13 @@ export class CaptureRepository {
     const value = captureSnapshotSchema.parse(snapshot);
     const changes = this.database
       .prepare(
-        `UPDATE capture_sessions SET state = ?, capture_mode = ?,
+        `UPDATE capture_sessions SET
+          title = CASE
+            WHEN state <> 'recoverable' AND ? = 'recoverable'
+              THEN 'Recover-' || title
+            ELSE title
+          END,
+          state = ?, capture_mode = ?,
           capture_timeline_ms = ?, system_audio_healthy = ?,
           microphone_healthy = ?, partial_capture = ?,
           finalized_chunk_count = ?, event_count = ?, gap_count = ?,
@@ -177,6 +216,7 @@ export class CaptureRepository {
         WHERE session_id = ? AND recovery_disposition IS NULL`,
       )
       .run(
+        value.state,
         value.state,
         value.captureMode,
         value.captureTimelineMs,
@@ -260,13 +300,21 @@ export class CaptureRepository {
   }
 
   find(sessionId: string): CaptureSnapshot | null {
+    return this.findSession(sessionId)?.snapshot ?? null;
+  }
+
+  findSession(sessionId: string): StoredCaptureSession | null {
     const row = this.database
       .prepare("SELECT * FROM capture_sessions WHERE session_id = ?")
       .get(sessionId) as CaptureSessionRow | undefined;
-    return row ? mapSnapshot(row) : null;
+    return row ? mapStoredSession(row) : null;
   }
 
   active(): CaptureSnapshot | null {
+    return this.activeSession()?.snapshot ?? null;
+  }
+
+  activeSession(): StoredCaptureSession | null {
     const row = this.database
       .prepare(
         `SELECT * FROM capture_sessions
@@ -275,10 +323,29 @@ export class CaptureRepository {
          ORDER BY updated_at_ms DESC LIMIT 1`,
       )
       .get() as CaptureSessionRow | undefined;
-    return row ? mapSnapshot(row) : null;
+    return row ? mapStoredSession(row) : null;
   }
 
-  listRecoveries(): CaptureSnapshot[] {
+  sessionTitle(sessionId: string): string | null {
+    const row = this.database
+      .prepare("SELECT title FROM capture_sessions WHERE session_id = ?")
+      .get(sessionId) as Pick<CaptureSessionRow, "title"> | undefined;
+    return row ? captureTitleSchema.parse(row.title) : null;
+  }
+
+  firstRecoverySessionId(): string | null {
+    const row = this.database
+      .prepare(
+        `SELECT session_id FROM capture_sessions
+         WHERE state IN ('recoverable', 'partial_capture', 'failed')
+           AND recovery_disposition IS NULL AND recording_sha256 IS NULL
+         ORDER BY updated_at_ms, session_id LIMIT 1`,
+      )
+      .get() as Pick<CaptureSessionRow, "session_id"> | undefined;
+    return row?.session_id ?? null;
+  }
+
+  listRecoveries(): CaptureRecoveryItem[] {
     return this.database
       .prepare(
         `SELECT * FROM capture_sessions
@@ -287,7 +354,33 @@ export class CaptureRepository {
          ORDER BY updated_at_ms, session_id`,
       )
       .all()
-      .map((row) => mapSnapshot(row as unknown as CaptureSessionRow));
+      .map((row) => mapRecovery(row as unknown as CaptureSessionRow));
+  }
+
+  renameSessionTitle(
+    sessionId: string,
+    rawTitle: string,
+    nowMs: number,
+  ): StoredCaptureSession {
+    const title = captureTitleSchema.parse(rawTitle);
+    return withTransaction(this.database, () => {
+      const changes = this.database
+        .prepare(
+          `UPDATE capture_sessions SET title = ?, updated_at_ms = ?
+           WHERE session_id = ? AND recovery_disposition IS NULL
+             AND (
+               state IN ('preparing', 'recording', 'paused', 'recoverable')
+               OR (state IN ('partial_capture', 'failed') AND recording_sha256 IS NULL)
+             )`,
+        )
+        .run(title, nowMs, sessionId).changes;
+      if (changes !== 1) {
+        throw new Error("capture session title is not editable");
+      }
+      const stored = this.findSession(sessionId);
+      if (!stored) throw new Error("capture session disappeared after rename");
+      return stored;
+    });
   }
 
   setRecoveryDisposition(
@@ -385,5 +478,19 @@ function mapSnapshot(row: CaptureSessionRow): CaptureSnapshot {
     interruptionReason: row.interruption_reason,
     recordingSha256: row.recording_sha256,
     journalSha256: row.journal_sha256,
+  });
+}
+
+function mapStoredSession(row: CaptureSessionRow): StoredCaptureSession {
+  return {
+    snapshot: mapSnapshot(row),
+    title: captureTitleSchema.parse(row.title),
+  };
+}
+
+function mapRecovery(row: CaptureSessionRow): CaptureRecoveryItem {
+  return captureRecoveryItemSchema.parse({
+    ...mapSnapshot(row),
+    title: row.title,
   });
 }

@@ -13,6 +13,7 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardAction,
@@ -121,6 +122,11 @@ describe("current shadcn primitives", () => {
   it("pins the composite Radix Nova registry style without a separate base", () => {
     expect(componentConfig.style).toBe("radix-nova");
     expect(componentConfig).not.toHaveProperty("base");
+  });
+
+  it("exposes the compact render-backed badge", () => {
+    render(<Badge variant="muted">4 条</Badge>);
+    expect(screen.getByText("4 条")).toHaveAttribute("data-slot", "badge");
   });
 
   it("uses a shadowless Nova Card surface with default and small spacing", () => {

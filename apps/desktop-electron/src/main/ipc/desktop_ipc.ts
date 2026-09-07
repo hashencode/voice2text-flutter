@@ -37,6 +37,8 @@ import {
   capturePreflightRequestSchema,
   captureStartRequestSchema,
   captureControlRequestSchema,
+  suggestCaptureTitleRequestSchema,
+  renameCaptureSessionRequestSchema,
   captureRecoveryListRequestSchema,
   captureRecoveryActionRequestSchema,
   microphoneTestStartRequestSchema,
@@ -44,6 +46,9 @@ import {
   microphoneSettingsOpenRequestSchema,
   type CapturePreflight,
   type CaptureSnapshot,
+  type CaptureRecoveryItem,
+  type RenameCaptureSessionRequest,
+  type SuggestCaptureTitleResponse,
   type MicrophoneTestSnapshot,
   floatingCaptureControlRequestSchema,
   floatingCapturePreferenceRequestSchema,
@@ -190,6 +195,7 @@ export interface DesktopIpcServices {
   }): Promise<CapturePreflight>;
   startCapture(options: {
     title: string;
+    refreshSuggestedTitle?: boolean;
     microphoneDeviceId?: string;
     captionEnabled: boolean;
     idempotencyKey: string;
@@ -199,7 +205,11 @@ export interface DesktopIpcServices {
     sessionId: string;
     idempotencyKey: string;
   }): Promise<CaptureSnapshot>;
-  listCaptureRecoveries(): Promise<CaptureSnapshot[]>;
+  suggestCaptureTitle(): Promise<SuggestCaptureTitleResponse>;
+  renameCaptureSession(
+    options: RenameCaptureSessionRequest,
+  ): Promise<ApplicationSnapshot>;
+  listCaptureRecoveries(): Promise<CaptureRecoveryItem[]>;
   actOnCaptureRecovery(options: {
     action: "keep" | "discard";
     sessionId: string;
@@ -630,6 +640,7 @@ export function createDesktopIpcHandlers(options: {
         schema: captureStartRequestSchema,
         invoke: async (payload: {
           title: string;
+          refreshSuggestedTitle?: boolean;
           microphoneDeviceId?: string;
           captionEnabled: boolean;
           idempotencyKey: string;
@@ -645,6 +656,21 @@ export function createDesktopIpcHandlers(options: {
           sessionId: string;
           idempotencyKey: string;
         }) => await options.services.controlCapture(payload),
+      } as RegisteredHandler,
+    ],
+    [
+      ipcChannels.captureTitleSuggest,
+      {
+        schema: suggestCaptureTitleRequestSchema,
+        invoke: async () => await options.services.suggestCaptureTitle(),
+      },
+    ],
+    [
+      ipcChannels.captureSessionRename,
+      {
+        schema: renameCaptureSessionRequestSchema,
+        invoke: async (payload: RenameCaptureSessionRequest) =>
+          await options.services.renameCaptureSession(payload),
       } as RegisteredHandler,
     ],
     [

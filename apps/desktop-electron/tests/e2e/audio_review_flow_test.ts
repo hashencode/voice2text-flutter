@@ -146,6 +146,8 @@ it("reviews a completed audio through validated Main and Preload contracts witho
     preflightCapture: vi.fn(),
     startCapture: vi.fn(),
     controlCapture: vi.fn(),
+    suggestCaptureTitle: vi.fn(),
+    renameCaptureSession: vi.fn(),
     listCaptureRecoveries: vi.fn(async () => []),
     actOnCaptureRecovery: vi.fn(),
     getCaptionSnapshot: vi.fn(async () => null),

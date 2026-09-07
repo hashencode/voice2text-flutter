@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "authorityKind": "public-render-evidence",
+  "originalRegistrySourceAvailable": false,
+  "source": {
+    "name": "ReUI App Shell 4",
+    "url": "https://reui.io/preview/base/app-shell-4",
+    "capturedOn": "2026-09-03",
+    "captureSurface": "agent-browser Chromium (fallback; in-app browser unavailable in acceptance turn)",
+    "browserVersion": "HeadlessChrome/151.0.0.0",
+    "theme": "light",
+    "style": "nova",
+    "primitiveBaseObserved": "base-ui",
+    "localBehaviorBase": "radix-ui",
+    "fontFamily": "Inter, \"Inter Fallback\""
+  },
+  "licenseBoundary": {
+    "mcpResult": {
+      "locked": true,
+      "requiredPlan": "pro"
+    },
+    "allowedUse": "Observe the public preview and independently reproduce its visual outcome with local primitives.",
+    "prohibitedUse": [
+      "Bypass the premium Registry",
+      "Claim access to the original React or Registry source",
+      "Decompile production JavaScript bundles",
+      "Copy the complete website stylesheet into the product",
+      "Hotlink ReUI runtime assets"
+    ]
+  },
+  "referenceImage": {
+    "capturedOn": "2026-09-03",
+    "relationship": "Same-task public reference used for the authorized regional comparison; historical image retained separately.",
+    "path": "reui-app-shell-4-2026-09-03-1280x720.png",
+    "viewport": {
+      "width": 1280,
+      "height": 720,
+      "devicePixelRatio": 1,
+      "zoom": 1
+    },
+    "sha256": "157dc7bc100b4922516de8fdc60cbd470fbf6277d75a1bb46a99c25703a4a58e"
+  },
+  "responsiveReference": {
+    "viewport": {
+      "width": 390,
+      "height": 844,
+      "devicePixelRatio": 1
+    },
+    "observedOutcome": "The primary rail and message list are hidden; the content pane remains with a sidebar trigger, truncated title and compact actions."
+  },
+  "evidence": {
+    "geometry": {
+      "desktopViewport": [1280, 720],
+      "sidebarTotal": [0, 0, 440, 720],
+      "primaryRail": [0, 0, 49, 720],
+      "contextPane": [49, 0, 390, 720],
+      "contentPane": [440, 0, 840, 720],
+      "contextHeader": [49, 0, 390, 50],
+      "searchBand": [49, 50, 390, 45],
+      "searchInput": [61, 58, 366, 28],
+      "tabsBand": [49, 95, 390, 37],
+      "contentHeader": [440, 0, 840, 50],
+      "collapseControlExpanded": [440, 336, 28, 48],
+      "collapsedSidebar": [0, 0, 48, 720],
+      "collapsedContentPane": [48, 0, 1232, 720]
+    },
+    "tokens": {
+      "background": "oklch(1 0 0)",
+      "foreground": "oklch(0.145 0 0)",
+      "primary": "oklch(0.205 0 0)",
+      "primaryForeground": "oklch(0.985 0 0)",
+      "muted": "oklch(0.97 0 0)",
+      "mutedForeground": "oklch(0.556 0 0)",
+      "accent": "oklch(0.97 0 0)",
+      "accentForeground": "oklch(0.205 0 0)",
+      "border": "oklch(0.922 0 0)",
+      "ring": "oklch(0.708 0 0)",
+      "sidebar": "oklch(0.985 0 0)",
+      "radius": "0.625rem",
+      "boxShadow": "none"
+    },
+    "controls": {
+      "railButton": {
+        "size": [32, 32],
+        "iconSize": 16,
+        "radius": 8,
+        "gap": 2
+      },
+      "headerIconButton": {
+        "size": [28, 28],
+        "radius": 8
+      },
+      "searchInput": {
+        "height": 28,
+        "radius": 10,
+        "fontSize": 12,
+        "lineHeight": 16,
+        "padding": [4, 10, 4, 28]
+      },
+      "tab": {
+        "height": 24,
+        "radius": "full",
+        "fontSize": 12,
+        "inactiveWeight": 400,
+        "activeWeight": 500,
+        "padding": [3, 10],
+        "gap": 8
+      },
+      "listRow": {
+        "padding": 12,
+        "gap": 10,
+        "fontSize": 14,
+        "lineHeight": 20,
+        "borderOpacity": 0.4,
+        "selectedBackground": "oklab(0.97 0 0 / 0.6)",
+        "hoverBackground": "oklab(0.97 0 0 / 0.6)"
+      },
+      "headerSeparator": {
+        "height": 20,
+        "width": 1
+      },
+      "collapseStroke": {
+        "width": 2,
+        "height": 16,
+        "segments": 2,
+        "segmentHeight": 8,
+        "background": "oklab(0.145 0 0 / 0.4)"
+      }
+    },
+    "states": {
+      "selectedTab": "dark primary pill with primary-foreground text",
+      "inactiveTab": "transparent with foreground at 60% opacity",
+      "selectedRow": "accent at 60% opacity",
+      "hoverRow": "accent at 60% opacity",
+      "collapsed": "48px icon rail and content origin at x=48",
+      "mobile": "content-only layout with sidebar trigger"
+    },
+    "structure": [
+      "sidebar wrapper",
+      "fixed 440px sidebar",
+      "49px primary icon rail",
+      "390px context pane",
+      "50px context header",
+      "45px search band",
+      "37px tab band",
+      "scrollable list rows",
+      "midpoint collapse control",
+      "flexible content inset",
+      "50px content header"
+    ]
+  },
+  "evidenceCanonicalization": "jq -cS '.evidence': recursively key-sorted compact JSON, UTF-8, including the trailing LF; not RFC 8785",
+  "evidenceSha256": "2bfe47dfdd4c424249f4200381b737e76ae2483e44f94ebcd075ee296ea976e4",
+  "historicalReferenceImage": {
+    "capturedOn": "2026-09-02",
+    "relationship": "Historical image retained unchanged; superseded for active acceptance by the 2026-09-03 same-session capture.",
+    "path": "reui-app-shell-4-1280x720.png",
+    "viewport": {
+      "width": 1280,
+      "height": 720,
+      "devicePixelRatio": 1,
+      "zoom": 1
+    },
+    "sha256": "cf275b5f8dfd390bce85529b00ed4b1b67993bb2b906944e8fce06be9fcf798f"
+  },
+  "rawEvidence": {
+    "path": "reui-app-shell-4-dom-2026-09-03.json",
+    "sha256": "e004c4b1b08a24b7b5a95081addeaff3f27316fd765d76d0f24f55571a3e7dbc",
+    "scope": "298 rendered non-SVG shell elements: hierarchy, classes, rects and selected computed properties; resource URLs only, no downloaded bundles."
+  },
+  "acceptance": {
+    "date": "2026-09-03",
+    "scope": "Shared shell chrome and context projections; not mail content or unchanged business workspaces.",
+    "referenceBrowser": "Chromium 151",
+    "productBrowser": "Electron 43.4.0 / Chromium 150.0.7871.224",
+    "productGolden": "../goldens/audio-app-shell-4.png",
+    "comparison": "Regional geometry/computed-style assertions plus direct image inspection at 1280x720; not a whole-page pixel-equality claim.",
+    "productDeltas": [
+      "Voice2Text navigation, logo, labels, data, counts and business content retained.",
+      "Radix and native button semantics retained instead of Base UI tabs.",
+      "Chinese uses PingFang SC; target is English.",
+      "History arrow icons retained instead of message chevrons.",
+      "Native title retained on collapse handle; no demo hover label.",
+      "Thin 1px keyboard focus retained instead of target input 3px ring.",
+      "880px docked minimum retained instead of target mobile sheet.",
+      "Voice2Text product context pane now defaults to 300px and supports a shared runtime resize range of 240px through 480px; the public ReUI evidence remains fixed at 390px with x=440 content origin."
+    ],
+    "verification": {
+      "visual": "Authorized 2026-09-04 result: 12 tests passed after direct candidate inspection and a nine-image product-golden refresh; the floating-control golden remained unchanged.",
+      "ui": "Authorized 2026-09-04 result: check:ui:quick and final check:ui passed formatting, lint, TypeScript and 214 tests across 20 files.",
+      "review": "The runtime resize test covers both split pointer hit areas, collapse-control isolation, four-section sharing, the 1280px-to-880px temporary clamp and restoration, reload reset, and unexpected Renderer errors."
+    },
+    "currentProductAcceptance": "Completed on 2026-09-04: verified the 300px default and x=350 content origin, drag/release behavior above and below the midpoint control, 1280px-to-880px temporary clamp from 480px to 350px and restoration to 480px, four-section sharing, collapse-control isolation, reload reset, and width-sensitive product goldens.",
+    "remaining": "No pending runtime pane-width visual acceptance work. Original-source equivalence, whole-page pixel equality, packaged resources and animated-transition correctness are not claimed."
+  }
+}

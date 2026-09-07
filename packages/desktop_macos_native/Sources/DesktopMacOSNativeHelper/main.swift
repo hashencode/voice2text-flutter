@@ -231,6 +231,17 @@ func encodedObject<T: Encodable>(_ value: T) throws -> Any {
   try JSONSerialization.jsonObject(with: encoder.encode(value))
 }
 
+func encodedRuntimeCapture(
+  _ value: CaptureSnapshot,
+  controller: CaptureController
+) throws -> [String: Any] {
+  guard var capture = try encodedObject(value) as? [String: Any] else {
+    throw CaptureFailure("HELPER_RESPONSE_INVALID", "capture response could not be encoded")
+  }
+  capture["audioActivity"] = controller.currentAudioActivity()
+  return capture
+}
+
 func emitSession(_ fields: [String: Any]) {
   var frame = fields
   frame["schemaVersion"] = 1
@@ -362,30 +373,30 @@ while let commandData = readLine() {
         minimumFreeBytes: request.minimumFreeBytes,
         microphoneDeviceId: request.microphoneDeviceId
       )
-      emitSession(["type": "result", "command": command, "capture": try encodedObject(value)])
+      emitSession(["type": "result", "command": command, "capture": try encodedRuntimeCapture(value, controller: captureController!)])
     case "capture-pause", "capture-system-sleep":
       let request = try decodeRequest(CaptureControlRequest.self, from: object)
       let value = try captureController!.pause(
         sessionId: request.sessionId,
         reason: command == "capture-system-sleep" ? "system_sleep" : request.reason
       )
-      emitSession(["type": "result", "command": command, "capture": try encodedObject(value)])
+      emitSession(["type": "result", "command": command, "capture": try encodedRuntimeCapture(value, controller: captureController!)])
     case "capture-resume":
       let request = try decodeRequest(CaptureControlRequest.self, from: object)
       let value = try captureController!.resume(sessionId: request.sessionId)
-      emitSession(["type": "result", "command": command, "capture": try encodedObject(value)])
+      emitSession(["type": "result", "command": command, "capture": try encodedRuntimeCapture(value, controller: captureController!)])
     case "capture-system-wake":
       let request = try decodeRequest(CaptureControlRequest.self, from: object)
       let value = try captureController!.markWake(sessionId: request.sessionId)
-      emitSession(["type": "result", "command": command, "capture": try encodedObject(value)])
+      emitSession(["type": "result", "command": command, "capture": try encodedRuntimeCapture(value, controller: captureController!)])
     case "capture-stop":
       let request = try decodeRequest(CaptureControlRequest.self, from: object)
       let value = try captureController!.stop(sessionId: request.sessionId)
-      emitSession(["type": "result", "command": command, "capture": try encodedObject(value)])
+      emitSession(["type": "result", "command": command, "capture": try encodedRuntimeCapture(value, controller: captureController!)])
     case "capture-snapshot":
       let request = try decodeRequest(CaptureControlRequest.self, from: object)
       let value = try captureController!.currentSnapshot(sessionId: request.sessionId)
-      emitSession(["type": "result", "command": command, "capture": try encodedObject(value)])
+      emitSession(["type": "result", "command": command, "capture": try encodedRuntimeCapture(value, controller: captureController!)])
     case "capture-recover":
       let values = try captureController!.recover()
       emitSession(["type": "result", "command": command, "captures": try encodedObject(values)])

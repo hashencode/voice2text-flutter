@@ -1,8 +1,16 @@
 import type * as React from "react";
-import { AudioLines, Bell, Cog, SendHorizontal, Waves } from "lucide-react";
+import {
+  AudioLines,
+  Bell,
+  Cog,
+  SendHorizontal,
+  UserRound,
+  Waves,
+} from "lucide-react";
 
 import { NavMain, type ShellNavigationItem } from "@/components/nav-main";
-import { Sidebar, SidebarHeader } from "@/components/ui/sidebar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Sidebar, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar";
 import type {
   ContextPanePresentation,
   RendererShellSection,
@@ -46,7 +54,7 @@ export function AppSidebar({
     <Sidebar
       collapsible="icon"
       mobileMode="inline"
-      overlayContent
+      suppressTransitionKey={current}
       data-presentation={presentation}
       className="z-20 overflow-hidden *:data-[sidebar=sidebar]:flex-row data-[presentation=overlay]:!w-[min(var(--sidebar-width),100vw)]"
     >
@@ -54,9 +62,9 @@ export function AppSidebar({
         collapsible="none"
         role="navigation"
         aria-label="工作站主导航"
-        className="w-[calc(var(--sidebar-width-icon)+1px)]! border-r"
+        className="w-[calc(var(--sidebar-width-icon)+1px)]! shrink-0 border-r"
       >
-        <SidebarHeader>
+        <SidebarHeader className="h-[50px] shrink-0">
           <div className="flex min-h-8 items-center justify-center">
             <span
               aria-label="Voice2Text"
@@ -79,6 +87,19 @@ export function AppSidebar({
           current={current}
           onNavigate={onNavigate}
         />
+        <SidebarFooter className="items-center px-2 pt-0 pb-3">
+          <div
+            aria-label="个人中心（即将推出）"
+            data-shell-profile-placeholder="true"
+            className="flex size-7 items-center justify-center"
+          >
+            <Avatar className="size-7" size="sm">
+              <AvatarFallback>
+                <UserRound className="size-3.5" aria-hidden="true" />
+              </AvatarFallback>
+            </Avatar>
+          </div>
+        </SidebarFooter>
       </Sidebar>
       {children}
     </Sidebar>

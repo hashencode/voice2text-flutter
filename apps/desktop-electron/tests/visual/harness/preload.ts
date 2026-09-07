@@ -123,6 +123,12 @@ const api: Voice2TextDesktopApi = {
   async controlCapture() {
     return activeCaptureSnapshot();
   },
+  async suggestCaptureTitle() {
+    return { title: "新录音2026081901" };
+  },
+  async renameCaptureSession() {
+    return structuredClone(application);
+  },
   async listCaptureRecoveries() {
     return structuredClone(fixture.recoveries);
   },

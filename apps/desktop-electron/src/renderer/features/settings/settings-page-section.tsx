@@ -1,43 +1,52 @@
 import * as React from "react";
 
 import { ItemGroup } from "@/components/ui/item";
+import { SelectContent } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import {
-  settingsSectionHeadingId,
-  type SettingsSection,
-} from "@/features/settings/settings-section-contract";
+import type { SettingsSection } from "@/features/settings/settings-section-contract";
+
+const SettingsPageSelectionContext =
+  React.createContext<SettingsSection | null>(null);
+
+export function SettingsPageSelectionProvider({
+  value,
+  children,
+}: React.PropsWithChildren<{ value: SettingsSection }>) {
+  return (
+    <SettingsPageSelectionContext.Provider value={value}>
+      {children}
+    </SettingsPageSelectionContext.Provider>
+  );
+}
 
 export function SettingsPageSection({
   section,
-  title,
+  label,
   action,
   children,
   className,
 }: React.PropsWithChildren<{
   section: SettingsSection;
-  title: string;
+  label: string;
   action?: React.ReactNode;
   className?: string;
 }>) {
-  const headingId = settingsSectionHeadingId(section);
+  const selectedSection = React.useContext(SettingsPageSelectionContext);
+  const hasAction = action !== undefined;
   return (
     <section
       data-settings-section={section}
-      aria-labelledby={headingId}
-      className={cn("scroll-mt-6", className)}
+      aria-label={label}
+      hidden={selectedSection !== null && selectedSection !== section}
+      className={className}
     >
-      <div className="flex min-h-8 items-center justify-between gap-3">
-        <h2
-          id={headingId}
-          tabIndex={-1}
-          className="text-base leading-[22px] font-medium outline-none"
-        >
-          {title}
-        </h2>
-        {action ? <div className="shrink-0">{action}</div> : null}
-      </div>
-      <div className="mt-3">{children}</div>
+      {hasAction ? (
+        <div className="flex min-h-8 justify-end">
+          <div className="shrink-0">{action}</div>
+        </div>
+      ) : null}
+      <div className={hasAction ? "mt-3" : undefined}>{children}</div>
     </section>
   );
 }
@@ -70,6 +79,14 @@ export function SettingsListBlock({
       {...props}
     />
   );
+}
+
+export function SettingsSelectContent({
+  position = "popper",
+  align = "end",
+  ...props
+}: React.ComponentProps<typeof SelectContent>) {
+  return <SelectContent position={position} align={align} {...props} />;
 }
 
 export function SettingsListSkeleton({ rows = 1 }: { rows?: number }) {

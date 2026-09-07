@@ -4,7 +4,7 @@ import type {
   AudioSummary,
   AudioWorkspaceSnapshot,
   CapturePreflight,
-  CaptureSnapshot,
+  CaptureRecoveryItem,
   CompanionSnapshot,
 } from "../../../src/shared/contracts";
 
@@ -15,14 +15,15 @@ export type VisualScenario =
   | "activity-messages"
   | "settings"
   | "audio-recovery"
-  | "companion-devices";
+  | "companion-devices"
+  | "pane-resize";
 
 export interface VisualRendererFixture {
   application: ApplicationSnapshot;
   audios: AudioSummary[];
   audioWorkspaces: AudioWorkspaceSnapshot[];
   companion: CompanionSnapshot;
-  recoveries: CaptureSnapshot[];
+  recoveries: CaptureRecoveryItem[];
   preflight: CapturePreflight;
   aiSettings: AiSettingsSnapshot;
 }
@@ -55,7 +56,7 @@ export function buildVisualFixture(
       library: { phase: "ready", audioCount: audios.length },
       reconciliation: [],
       activity:
-        scenario === "activity-messages"
+        scenario === "activity-messages" || scenario === "pane-resize"
           ? [
               {
                 id: "activity-visual-warning",
@@ -333,9 +334,10 @@ function peer(
   };
 }
 
-function recoveryFixtures(): CaptureSnapshot[] {
+function recoveryFixtures(): CaptureRecoveryItem[] {
   return [0, 1, 2, 3, 4, 5].map((index) => ({
     sessionId: `session-visual-recovery-000${index + 1}`,
+    title: `Recover-产品设计评审 ${index + 1}`,
     state: "recoverable",
     captureMode: "dual_track",
     captureTimelineMs: (index + 2) * 15 * 60_000,

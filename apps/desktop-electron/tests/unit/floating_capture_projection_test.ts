@@ -30,6 +30,7 @@ describe("floating capture projection", () => {
         sessionId: "session-private-123456",
         title: "private meeting",
         elapsedMs: 9_000,
+        audioActivity: 0.91,
         message: "/private/path/raw error",
       }),
     );
@@ -42,7 +43,7 @@ describe("floating capture projection", () => {
       attention: false,
     });
     expect(JSON.stringify(projected)).not.toMatch(
-      /private meeting|private\/path/,
+      /private meeting|private\/path|audioActivity/,
     );
   });
 

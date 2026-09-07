@@ -28,6 +28,7 @@ function handlers() {
   }));
   const openAudio = vi.fn(async () => null);
   const openLocalModelRoot = vi.fn(async () => undefined);
+  const renameCaptureSession = vi.fn(async () => applicationSnapshot());
   return {
     cancelProcessing,
     handlers: createDesktopIpcHandlers({
@@ -77,6 +78,10 @@ function handlers() {
         preflightCapture: vi.fn(),
         startCapture: vi.fn(),
         controlCapture: vi.fn(),
+        suggestCaptureTitle: vi.fn(async () => ({
+          title: "新录音2026070101",
+        })),
+        renameCaptureSession,
         listCaptureRecoveries: vi.fn(async () => []),
         actOnCaptureRecovery: vi.fn(),
         getCaptionSnapshot: vi.fn(async () => null),
@@ -98,10 +103,29 @@ function handlers() {
     workerHealth,
     openAudio,
     openLocalModelRoot,
+    renameCaptureSession,
   };
 }
 
 describe("Main IPC validation", () => {
+  it("rejects invalid capture renames before mutation", async () => {
+    const fixture = handlers();
+    for (const payload of [
+      { sessionId: "bad", title: "产品回访" },
+      { sessionId: "session-capture-123456", title: "   " },
+      { sessionId: "session-capture-123456", title: "x".repeat(257) },
+    ]) {
+      await expect(
+        fixture.handlers.invoke(
+          ipcChannels.captureSessionRename,
+          trustedEvent,
+          payload,
+        ),
+      ).rejects.toMatchObject({ code: "INVALID_PAYLOAD" });
+    }
+    expect(fixture.renameCaptureSession).not.toHaveBeenCalled();
+  });
+
   it("rejects raw capture paths before they reach Main services", async () => {
     const fixture = handlers();
     await expect(
@@ -334,6 +358,8 @@ describe("Main IPC validation", () => {
         preflightCapture: vi.fn(),
         startCapture: vi.fn(),
         controlCapture: vi.fn(),
+        suggestCaptureTitle: vi.fn(),
+        renameCaptureSession: vi.fn(),
         listCaptureRecoveries: vi.fn(async () => []),
         actOnCaptureRecovery: vi.fn(),
         getCaptionSnapshot: vi.fn(async () => null),

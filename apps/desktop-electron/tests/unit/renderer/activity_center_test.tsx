@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   ActivityContextPane,
+  ActivityContextPaneFilters,
+  ActivityContextPaneSearch,
   ActivityErrorDialog,
   ActivityMainWorkspace,
   type ActivityItemView,
 } from "../../../src/renderer/features/activity/activity-center";
+import { useState } from "react";
 
 const failed: ActivityItemView = {
   id: "failed",
@@ -36,11 +39,26 @@ describe("activity pages", () => {
 
   it("uses an empty state when no message is selected", () => {
     render(<ActivityMainWorkspace item={null} onOpenDetails={vi.fn()} />);
-    const empty = screen.getByRole("heading", {
-      name: "请选择消息",
-    }).parentElement!;
-    expect(empty).toHaveTextContent("请选择消息");
-    expect(empty.querySelector("p")).toBeNull();
+    const empty = screen
+      .getByRole("heading", { name: "还没有消息" })
+      .closest<HTMLElement>('[data-slot="full-screen-empty-state"]')!;
+    expect(empty).toBeVisible();
+    expect(empty).toHaveTextContent(
+      "当有录音完成或需要处理时，相关消息会显示在这里。",
+    );
+    expect(
+      empty.querySelector('[data-slot="full-screen-empty-state-illustration"]'),
+    ).not.toBeNull();
+    expect(
+      empty.querySelector('[data-slot="full-screen-empty-state-graphic"]'),
+    ).toBeInstanceOf(SVGElement);
+    expect(
+      empty
+        .querySelector('[data-slot="full-screen-empty-state-graphic"]')
+        ?.querySelectorAll("polygon"),
+    ).toHaveLength(3);
+    expect(empty.querySelector("svg.lucide-inbox")).toBeNull();
+    expect(within(empty).queryByRole("button")).toBeNull();
   });
 
   it("selects a summary from the second column and renders full detail", async () => {
@@ -59,9 +77,12 @@ describe("activity pages", () => {
     const user = userEvent.setup();
     const messageRow = screen.getByRole("button", { name: /录制需要处理/ });
     expect(messageRow).toHaveAttribute("data-slot", "item");
+    expect(messageRow).toHaveAttribute("data-variant", "context");
+    expect(messageRow).toHaveAttribute("aria-current", "true");
     expect(messageRow.querySelector('[data-slot="item-media"]')).not.toBeNull();
     await user.click(messageRow);
     expect(select).toHaveBeenCalledWith(failed);
+    expect(select).toHaveBeenCalledOnce();
     const detail = screen.getByRole("region", { name: "消息详情" });
     expect(detail).not.toHaveTextContent("录制需要处理");
     expect(detail).not.toHaveTextContent("这次录制未能正常完成");
@@ -100,6 +121,69 @@ describe("activity pages", () => {
     await user.clear(screen.getByRole("searchbox", { name: "搜索消息" }));
     await user.click(screen.getByRole("button", { name: "全部标记为已读" }));
     expect(markAll).toHaveBeenCalledOnce();
+  });
+
+  it("combines real unread and attention counts with search", async () => {
+    const complete: ActivityItemView = {
+      ...failed,
+      id: "complete",
+      kind: "capture_completed",
+      title: "Project Alpha",
+      severity: "info",
+      read: true,
+    };
+    function Harness() {
+      const [query, setQuery] = useState("");
+      const [filter, setFilter] = useState<"all" | "unread" | "attention">(
+        "all",
+      );
+      return (
+        <>
+          <ActivityContextPaneSearch value={query} onValueChange={setQuery} />
+          <ActivityContextPaneFilters
+            items={[failed, complete]}
+            value={filter}
+            onValueChange={setFilter}
+          />
+          <ActivityContextPane
+            items={[failed, complete]}
+            selectedId="complete"
+            onSelect={vi.fn()}
+            query={query}
+            filter={filter}
+          />
+        </>
+      );
+    }
+    render(<Harness />);
+    const user = userEvent.setup();
+
+    const allFilter = screen.getByRole("button", { name: "全部 2" });
+    expect(allFilter).toHaveAttribute("data-variant", "filter");
+    expect(allFilter).toHaveAttribute("aria-pressed", "true");
+    expect(allFilter.querySelector('[data-slot="badge"]')).toHaveTextContent(
+      "2",
+    );
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "搜索消息" })).toHaveAttribute(
+      "data-variant",
+      "context-search",
+    );
+    expect(screen.getByRole("button", { name: "未读 1" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "需处理 1" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "未读 1" }));
+    expect(allFilter).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "未读 1" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByText("录制需要处理")).toBeVisible();
+    expect(screen.queryByText("Project Alpha")).not.toBeInTheDocument();
+    await user.type(
+      screen.getByRole("searchbox", { name: "搜索消息" }),
+      "alpha",
+    );
+    expect(screen.getByText("没有匹配的消息")).toBeVisible();
   });
 
   it("keeps the all-read action disabled without unread items and exposes failures", () => {

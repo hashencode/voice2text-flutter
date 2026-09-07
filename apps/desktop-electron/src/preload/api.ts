@@ -39,9 +39,13 @@ import {
   capturePreflightRequestSchema,
   captureStartRequestSchema,
   captureControlRequestSchema,
+  suggestCaptureTitleRequestSchema,
+  suggestCaptureTitleResponseSchema,
+  renameCaptureSessionRequestSchema,
   captureRecoveryActionRequestSchema,
   capturePreflightSchema,
   captureSnapshotSchema,
+  captureRecoveryItemSchema,
   microphoneTestStartRequestSchema,
   microphoneTestControlRequestSchema,
   microphoneTestSnapshotSchema,
@@ -433,8 +437,22 @@ export function createDesktopApi(
         await bridge.invoke(ipcChannels.captureControl, payload),
       );
     },
+    async suggestCaptureTitle() {
+      const payload = suggestCaptureTitleRequestSchema.parse({});
+      return suggestCaptureTitleResponseSchema.parse(
+        await bridge.invoke(ipcChannels.captureTitleSuggest, payload),
+      );
+    },
+    async renameCaptureSession(
+      options: Parameters<Voice2TextDesktopApi["renameCaptureSession"]>[0],
+    ) {
+      const payload = renameCaptureSessionRequestSchema.parse(options);
+      return applicationSnapshotSchema.parse(
+        await bridge.invoke(ipcChannels.captureSessionRename, payload),
+      );
+    },
     async listCaptureRecoveries() {
-      return captureSnapshotSchema
+      return captureRecoveryItemSchema
         .array()
         .max(256)
         .parse(await bridge.invoke(ipcChannels.captureRecoveryList, {}));

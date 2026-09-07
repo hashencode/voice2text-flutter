@@ -1,6 +1,7 @@
 import type {
   CaptureControlCommand,
   CapturePreflight,
+  CaptureRuntimeSnapshot,
   CaptureSnapshot,
   CaptureStartCommand,
   MicrophoneTestSnapshot,
@@ -22,13 +23,13 @@ export interface CaptureNativePort {
     captionModelAvailable: boolean;
     requestPermissions: boolean;
   }): Promise<CapturePreflight>;
-  start(command: CaptureStartCommand): Promise<CaptureSnapshot>;
-  pause(command: CaptureControlCommand): Promise<CaptureSnapshot>;
-  resume(command: CaptureControlCommand): Promise<CaptureSnapshot>;
-  stop(command: CaptureControlCommand): Promise<CaptureSnapshot>;
-  systemSleep(command: CaptureControlCommand): Promise<CaptureSnapshot>;
-  systemWake(command: CaptureControlCommand): Promise<CaptureSnapshot>;
-  snapshot(sessionId: string): Promise<CaptureSnapshot>;
+  start(command: CaptureStartCommand): Promise<CaptureRuntimeSnapshot>;
+  pause(command: CaptureControlCommand): Promise<CaptureRuntimeSnapshot>;
+  resume(command: CaptureControlCommand): Promise<CaptureRuntimeSnapshot>;
+  stop(command: CaptureControlCommand): Promise<CaptureRuntimeSnapshot>;
+  systemSleep(command: CaptureControlCommand): Promise<CaptureRuntimeSnapshot>;
+  systemWake(command: CaptureControlCommand): Promise<CaptureRuntimeSnapshot>;
+  snapshot(sessionId: string): Promise<CaptureRuntimeSnapshot>;
   recover(): Promise<CaptureSnapshot[]>;
   discard(sessionId: string, idempotencyKey: string): Promise<void>;
   startMicrophoneTest(

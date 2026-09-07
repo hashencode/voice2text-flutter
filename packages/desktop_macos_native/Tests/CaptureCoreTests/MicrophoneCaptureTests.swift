@@ -39,6 +39,24 @@ final class MicrophoneCaptureTests: XCTestCase {
     XCTAssertEqual(int32Result.normalizedRMS, floatResult.normalizedRMS, accuracy: 0.0001)
   }
 
+  func testSystemAudioUsesTheSameNormalizedActivityMeter() throws {
+    guard #available(macOS 14.2, *) else { return }
+    let buffer = try makeBuffer(
+      format: .pcmFormatFloat32,
+      channels: [[0.1, -0.65, 0.2]],
+      interleaved: false
+    )
+    guard case let .samples(_, microphoneRMS, microphonePeak) =
+      MicrophonePCMBufferMeter.measure(buffer),
+      case let .samples(_, systemRMS, systemPeak) =
+        CoreAudioProcessTapCapture.measureActivity(buffer)
+    else {
+      return XCTFail("matching activity meters should accept the same buffer")
+    }
+    XCTAssertEqual(systemRMS, microphoneRMS)
+    XCTAssertEqual(systemPeak, microphonePeak)
+  }
+
   func testPlanarAndInterleavedLayoutsHonorStrideAndMergeChannels() throws {
     let channels = [
       [0.1, -0.1, 0.1, -0.1],
@@ -106,8 +124,8 @@ final class MicrophoneCaptureTests: XCTestCase {
     XCTAssertEqual(int32.normalizedRMS, 1, accuracy: 0.0001)
   }
 
-  func testMeterWindowIsConsumedOnceAndExpiresAfterRetentionLimit() {
-    var accumulator = MicrophoneMeterAccumulator(retentionNanoseconds: 250_000_000)
+  func testMeterWindowRetainsLatestLevelUntilRetentionExpires() {
+    var accumulator = MicrophoneMeterAccumulator(retentionNanoseconds: 750_000_000)
     accumulator.record(normalizedRMS: 0.4, normalizedPeak: 0.8, at: 1_000_000_000)
     accumulator.record(normalizedRMS: 0.1, normalizedPeak: 0.2, at: 1_021_000_000)
 
@@ -115,11 +133,19 @@ final class MicrophoneCaptureTests: XCTestCase {
     XCTAssertEqual(first.normalizedRMS, 0.4)
     XCTAssertEqual(first.normalizedPeak, 0.8)
     let second = accumulator.consume(at: 1_050_000_001)
-    XCTAssertEqual(second.normalizedRMS, 0)
-    XCTAssertEqual(second.normalizedPeak, 0)
+    XCTAssertEqual(second.normalizedRMS, 0.4)
+    XCTAssertEqual(second.normalizedPeak, 0.8)
 
     accumulator.record(normalizedRMS: 0.5, normalizedPeak: 0.7, at: 2_000_000_000)
-    let expired = accumulator.consume(at: 2_250_000_001)
+    let continuous = accumulator.consume(at: 2_500_000_000)
+    XCTAssertEqual(continuous.normalizedRMS, 0.5)
+    XCTAssertEqual(continuous.normalizedPeak, 0.7)
+    accumulator.record(normalizedRMS: 0.2, normalizedPeak: 0.3, at: 2_600_000_000)
+    XCTAssertEqual(accumulator.consume(at: 3_100_000_000).normalizedPeak, 0.3)
+    accumulator.record(normalizedRMS: 0, normalizedPeak: 0, at: 3_200_000_000)
+    XCTAssertEqual(accumulator.consume(at: 3_250_000_000).normalizedPeak, 0)
+    accumulator.record(normalizedRMS: 0.6, normalizedPeak: 0.9, at: 4_000_000_000)
+    let expired = accumulator.consume(at: 4_750_000_001)
     XCTAssertEqual(expired.normalizedRMS, 0)
     XCTAssertEqual(expired.normalizedPeak, 0)
   }

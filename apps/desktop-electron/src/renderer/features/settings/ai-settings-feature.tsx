@@ -35,7 +35,6 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
-  SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -44,6 +43,7 @@ import {
   SettingsItemGroup,
   SettingsListSkeleton,
   SettingsPageSection,
+  SettingsSelectContent,
 } from "@/features/settings/settings-page-section";
 import { userFacingError } from "@/lib/user-facing-error";
 import type {
@@ -200,15 +200,13 @@ function renderSettingsPageSection(
   action?: React.ReactNode,
 ) {
   return (
-    <section aria-label="音频智能设置">
-      <SettingsPageSection
-        section="cloud-models"
-        title="云端模型"
-        action={action}
-      >
-        {cloudModels}
-      </SettingsPageSection>
-    </section>
+    <SettingsPageSection
+      section="cloud-models"
+      label="云端模型"
+      action={action}
+    >
+      {cloudModels}
+    </SettingsPageSection>
   );
 }
 
@@ -699,10 +697,10 @@ function ProviderFields({
           >
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SettingsSelectContent>
             <SelectItem value="deepseek">DeepSeek</SelectItem>
             <SelectItem value="openai-compatible">OpenAI-compatible</SelectItem>
-          </SelectContent>
+          </SettingsSelectContent>
         </Select>
       </div>
       <LabeledInput

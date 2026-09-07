@@ -3,14 +3,22 @@ import path from "node:path";
 import {
   captureControlCommandSchema,
   capturePreflightSchema,
+  captureRuntimeSnapshotSchema,
   captureSnapshotSchema,
   captureStartCommandSchema,
+  captureTitleSchema,
   type CaptureControlCommand,
   type CapturePreflight,
+  type CaptureRecoveryItem,
+  type CaptureRuntimeSnapshot,
   type CaptureSnapshot,
   type CaptureStartCommand,
+  type SuggestCaptureTitleResponse,
 } from "../../../shared/contracts";
-import type { CaptureRepository } from "../../storage/repositories/capture_repository";
+import type {
+  CaptureRepository,
+  StoredCaptureSession,
+} from "../../storage/repositories/capture_repository";
 import type { CaptureNativePort } from "./capture_native_port";
 import {
   validateCaptureAuthority,
@@ -19,6 +27,7 @@ import {
 
 export class DesktopCaptureService {
   private currentSessionId: string | null = null;
+  private currentAudioActivity = 0;
 
   constructor(
     private readonly repository: CaptureRepository,
@@ -26,6 +35,7 @@ export class DesktopCaptureService {
     private readonly captureRoot: string,
     private readonly now: () => number = Date.now,
     private readonly authorityValidator: typeof validateCaptureAuthority = validateCaptureAuthority,
+    private readonly captureDay: typeof localCaptureDay = localCaptureDay,
   ) {}
 
   async preflight(command: {
@@ -36,32 +46,43 @@ export class DesktopCaptureService {
     return capturePreflightSchema.parse(await this.native.preflight(command));
   }
 
-  async start(raw: CaptureStartCommand): Promise<CaptureSnapshot> {
-    const command = captureStartCommandSchema.parse(raw);
+  async start(
+    raw: CaptureStartCommand,
+    options: { refreshSuggestedTitle?: boolean } = {},
+  ): Promise<CaptureSnapshot> {
+    const parsed = captureStartCommandSchema.parse(raw);
     const cached = this.cached(
-      command.sessionId,
-      command.idempotencyKey,
+      parsed.sessionId,
+      parsed.idempotencyKey,
       "start",
     );
     if (cached) return cached;
-    if (this.repository.hasActionReceipt(command.sessionId, "start")) {
+    if (this.repository.hasActionReceipt(parsed.sessionId, "start")) {
       throw new Error("capture start idempotency conflict");
     }
+    const startNowMs = this.now();
+    const command = {
+      ...parsed,
+      title: options.refreshSuggestedTitle
+        ? this.titleSuggestionAt(startNowMs)
+        : parsed.title,
+    };
     this.repository.beginSession({
       sessionId: command.sessionId,
       title: command.title,
       workspacePath: path.join(this.captureRoot, command.sessionId),
-      nowMs: this.now(),
+      nowMs: startNowMs,
     });
     let result: CaptureSnapshot;
     try {
-      result = captureSnapshotSchema.parse(await this.native.start(command));
+      result = this.acceptRuntime(await this.native.start(command));
     } catch {
       try {
-        result = captureSnapshotSchema.parse(
+        result = this.acceptRuntime(
           await this.native.snapshot(command.sessionId),
         );
       } catch {
+        this.currentAudioActivity = 0;
         result = captureSnapshotSchema.parse({
           sessionId: command.sessionId,
           state: "failed",
@@ -97,7 +118,7 @@ export class DesktopCaptureService {
       command.action,
     );
     if (cached) return cached;
-    const result = captureSnapshotSchema.parse(
+    const result = this.acceptRuntime(
       await this.native[command.action](command),
     );
     this.assertSession(command.sessionId, result);
@@ -129,9 +150,7 @@ export class DesktopCaptureService {
     });
     const nativeAction =
       action === "system-sleep" ? "systemSleep" : "systemWake";
-    const result = captureSnapshotSchema.parse(
-      await this.native[nativeAction](command),
-    );
+    const result = this.acceptRuntime(await this.native[nativeAction](command));
     this.assertSession(sessionId, result);
     return this.repository.saveSnapshotAndReceipt(
       result,
@@ -154,10 +173,45 @@ export class DesktopCaptureService {
       : this.repository.active();
   }
 
-  async refresh(sessionId: string): Promise<CaptureSnapshot> {
-    const result = captureSnapshotSchema.parse(
-      await this.native.snapshot(sessionId),
+  audioActivity(): number {
+    return this.currentAudioActivity;
+  }
+
+  suggestCaptureTitle(): SuggestCaptureTitleResponse {
+    const title = this.titleSuggestionAt(this.now());
+    return { title };
+  }
+
+  sessionTitle(sessionId: string): string {
+    const title = this.repository.sessionTitle(sessionId);
+    if (!title) throw new Error("capture session title is unavailable");
+    return title;
+  }
+
+  renameSession(sessionId: string, title: string): StoredCaptureSession {
+    const currentSessionId =
+      this.currentSessionId ??
+      this.repository.activeSession()?.snapshot.sessionId ??
+      this.repository.firstRecoverySessionId() ??
+      null;
+    if (sessionId !== currentSessionId) {
+      throw new Error("rename must target the current capture session");
+    }
+    return this.repository.renameSessionTitle(
+      sessionId,
+      captureTitleSchema.parse(title),
+      this.now(),
     );
+  }
+
+  async refresh(sessionId: string): Promise<CaptureSnapshot> {
+    let result: CaptureSnapshot;
+    try {
+      result = this.acceptRuntime(await this.native.snapshot(sessionId));
+    } catch (error) {
+      this.currentAudioActivity = 0;
+      throw error;
+    }
     this.assertSession(sessionId, result);
     if (
       (result.state === "completed" || result.state === "partial_capture") &&
@@ -185,7 +239,7 @@ export class DesktopCaptureService {
       if (!this.repository.find(value.sessionId)) {
         this.repository.beginSession({
           sessionId: value.sessionId,
-          title: "中断的音频录制",
+          title: `新录音-${value.sessionId.slice(-12)}`,
           workspacePath: path.join(this.captureRoot, value.sessionId),
           nowMs: this.now(),
         });
@@ -217,10 +271,11 @@ export class DesktopCaptureService {
         );
       }
     }
+    this.selectCurrentSession();
     return values;
   }
 
-  listRecoveries(): CaptureSnapshot[] {
+  listRecoveries(): CaptureRecoveryItem[] {
     return this.repository.listRecoveries();
   }
 
@@ -232,6 +287,7 @@ export class DesktopCaptureService {
     if (cached) {
       if (cached.action !== "discard")
         throw new Error("capture idempotency conflict");
+      this.selectCurrentSession();
       return;
     }
     await this.native.discard(sessionId, idempotencyKey);
@@ -240,16 +296,22 @@ export class DesktopCaptureService {
       idempotencyKey,
       this.now(),
     );
+    this.selectCurrentSession();
   }
 
   keepRecovered(sessionId: string, idempotencyKey: string): CaptureSnapshot {
     const cached = this.cached(sessionId, idempotencyKey, "keep");
-    if (cached) return cached;
-    return this.repository.keepRecoveryAndReceipt(
+    if (cached) {
+      this.selectCurrentSession();
+      return cached;
+    }
+    const result = this.repository.keepRecoveryAndReceipt(
       sessionId,
       idempotencyKey,
       this.now(),
     );
+    this.selectCurrentSession();
+    return result;
   }
 
   private cached(
@@ -264,10 +326,35 @@ export class DesktopCaptureService {
     return receipt.result;
   }
 
+  private titleSuggestionAt(nowMs: number): string {
+    const day = this.captureDay(nowMs);
+    const sequence =
+      this.repository.countSessionsCreatedBetween(day.startMs, day.endMs) + 1;
+    return `新录音${day.dateStamp}${String(sequence).padStart(2, "0")}`;
+  }
+
+  private selectCurrentSession(): void {
+    this.currentSessionId =
+      this.repository.firstRecoverySessionId() ??
+      this.repository.activeSession()?.snapshot.sessionId ??
+      null;
+  }
+
   private assertSession(expected: string, snapshot: CaptureSnapshot): void {
     if (snapshot.sessionId !== expected) {
       throw new Error("capture helper returned the wrong session");
     }
+  }
+
+  private acceptRuntime(raw: CaptureRuntimeSnapshot): CaptureSnapshot {
+    const runtime = captureRuntimeSnapshotSchema.parse(raw);
+    const { audioActivity, ...durable } = runtime;
+    this.currentAudioActivity =
+      (runtime.state === "recording" || runtime.state === "partial_capture") &&
+      (runtime.systemAudioHealthy || runtime.microphoneHealthy)
+        ? audioActivity
+        : 0;
+    return captureSnapshotSchema.parse(durable);
   }
 
   private async validatedAuthority(
@@ -282,4 +369,23 @@ export class DesktopCaptureService {
       expectedJournalSha256: snapshot.journalSha256,
     });
   }
+}
+
+export function localCaptureDay(nowMs: number): {
+  startMs: number;
+  endMs: number;
+  dateStamp: string;
+} {
+  if (!Number.isSafeInteger(nowMs) || nowMs < 0) {
+    throw new Error("capture title clock is invalid");
+  }
+  const current = new Date(nowMs);
+  const year = current.getFullYear();
+  const month = current.getMonth();
+  const day = current.getDate();
+  return {
+    startMs: new Date(year, month, day).getTime(),
+    endMs: new Date(year, month, day + 1).getTime(),
+    dateStamp: `${String(year).padStart(4, "0")}${String(month + 1).padStart(2, "0")}${String(day).padStart(2, "0")}`,
+  };
 }

@@ -1,6 +1,7 @@
 import * as React from "react";
-import { CheckCircle2, MailOpen, Search, TriangleAlert } from "lucide-react";
+import { CheckCircle2, MailOpen, TriangleAlert } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/ui/empty-state";
+import { EmptyState, FullScreenEmptyState } from "@/components/ui/empty-state";
 import {
   Item,
   ItemActions,
@@ -19,7 +20,10 @@ import {
   ItemMedia,
   ItemTitle,
 } from "@/components/ui/item";
-import { SidebarInput } from "@/components/ui/sidebar";
+import {
+  ContextPaneFilter,
+  ContextPaneSearch,
+} from "@/features/shell/context-pane-controls";
 import {
   Tooltip,
   TooltipContent,
@@ -39,6 +43,8 @@ export type ActivityItemView = Pick<
   | "createdAt"
 >;
 
+export type ActivityFilter = "all" | "unread" | "attention";
+
 const formatter = new Intl.DateTimeFormat("zh-CN", {
   month: "numeric",
   day: "numeric",
@@ -54,6 +60,8 @@ export function ActivityContextPane({
   markAllPending = false,
   operationError = null,
   onMarkAllRead = () => undefined,
+  query: controlledQuery,
+  filter: controlledFilter,
 }: {
   items: ActivityItemView[];
   selectedId: string | null;
@@ -62,49 +70,30 @@ export function ActivityContextPane({
   markAllPending?: boolean;
   operationError?: string | null;
   onMarkAllRead?: () => void;
+  query?: string;
+  filter?: ActivityFilter;
 }) {
   const [query, setQuery] = React.useState("");
-  const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
-  const visibleItems = normalizedQuery
-    ? items.filter((item) =>
-        item.title.toLocaleLowerCase("zh-CN").includes(normalizedQuery),
-      )
-    : items;
+  const effectiveQuery = controlledQuery ?? query;
+  const effectiveFilter = controlledFilter ?? "all";
+  const visibleItems = filterActivityItems(
+    items,
+    effectiveQuery,
+    effectiveFilter,
+  );
+  const embeddedControls = controlledQuery === undefined;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-2 p-2">
-        <div className="relative min-w-0 flex-1">
-          <Search
-            aria-hidden="true"
-            className="pointer-events-none absolute top-2 left-2.5 size-4 text-muted-foreground"
-          />
-          <SidebarInput
-            type="search"
-            aria-label="搜索消息"
-            value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
-            className="pl-8"
+      {embeddedControls ? (
+        <div className="flex shrink-0 items-center gap-2 p-2">
+          <ActivityContextPaneSearch value={query} onValueChange={setQuery} />
+          <ActivityContextPaneHead
+            unreadCount={unreadCount}
+            markAllPending={markAllPending}
+            onMarkAllRead={onMarkAllRead}
           />
         </div>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                aria-label="全部标记为已读"
-                aria-busy={markAllPending}
-                disabled={unreadCount === 0 || markAllPending}
-                onClick={onMarkAllRead}
-              >
-                <MailOpen aria-hidden="true" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">全部标记为已读</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
+      ) : null}
       {operationError ? (
         <p role="alert" className="border-b px-3 py-2 text-sm">
           {operationError}
@@ -117,17 +106,14 @@ export function ActivityContextPane({
           className="min-h-0 flex-1"
         />
       ) : (
-        <ul
-          className="divide-y"
-          aria-label="消息列表"
-          data-flat-row-list="true"
-        >
+        <ul aria-label="消息列表" data-flat-row-list="true">
           {visibleItems.map((item) => (
             <li key={item.id}>
               <Item
                 asChild
-                size="sm"
-                className="w-full rounded-none border-0 text-left hover:bg-accent aria-current:bg-muted"
+                variant="context"
+                size="context"
+                className="text-left"
               >
                 <button
                   type="button"
@@ -139,19 +125,14 @@ export function ActivityContextPane({
                     <ActivityIcon severity={item.severity} />
                   </ItemMedia>
                   <ItemContent>
-                    <ItemTitle className="max-w-full truncate">
-                      {item.title}
-                    </ItemTitle>
+                    <ItemTitle>{item.title}</ItemTitle>
                     <ItemDescription>
                       {formatter.format(item.createdAt)}
                     </ItemDescription>
                   </ItemContent>
                   {!item.read ? (
                     <ItemActions>
-                      <span
-                        className="size-2 rounded-full bg-primary"
-                        aria-label="未读"
-                      />
+                      <Badge variant="dot" aria-label="未读" />
                     </ItemActions>
                   ) : null}
                 </button>
@@ -164,6 +145,109 @@ export function ActivityContextPane({
   );
 }
 
+export function ActivityContextPaneHead({
+  unreadCount,
+  markAllPending,
+  onMarkAllRead,
+}: {
+  unreadCount: number;
+  markAllPending: boolean;
+  onMarkAllRead: () => void;
+}) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            className="size-7"
+            aria-label="全部标记为已读"
+            aria-busy={markAllPending}
+            disabled={unreadCount === 0 || markAllPending}
+            onClick={onMarkAllRead}
+          >
+            <MailOpen aria-hidden="true" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">全部标记为已读</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+export function ActivityContextPaneSearch({
+  value,
+  onValueChange,
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
+}) {
+  return (
+    <ContextPaneSearch
+      aria-label="搜索消息"
+      value={value}
+      onChange={(event) => onValueChange(event.currentTarget.value)}
+    />
+  );
+}
+
+export function ActivityContextPaneFilters({
+  items,
+  value,
+  onValueChange,
+}: {
+  items: readonly ActivityItemView[];
+  value: ActivityFilter;
+  onValueChange: (value: ActivityFilter) => void;
+}) {
+  const filters: readonly { value: ActivityFilter; label: string }[] = [
+    { value: "all", label: "全部" },
+    { value: "unread", label: "未读" },
+    { value: "attention", label: "需处理" },
+  ];
+  const counts: Record<ActivityFilter, number> = {
+    all: items.length,
+    unread: items.filter((item) => !item.read).length,
+    attention: items.filter((item) => item.severity === "warning").length,
+  };
+  return (
+    <div
+      role="group"
+      aria-label="消息筛选"
+      className="flex min-w-0 items-center gap-0.5 overflow-x-auto"
+    >
+      {filters.map((item) => (
+        <ContextPaneFilter
+          key={item.value}
+          label={item.label}
+          count={counts[item.value]}
+          aria-pressed={value === item.value}
+          onClick={() => onValueChange(item.value)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function filterActivityItems(
+  items: readonly ActivityItemView[],
+  query: string,
+  filter: ActivityFilter,
+): ActivityItemView[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
+  return items.filter((item) => {
+    const matchesQuery =
+      !normalizedQuery ||
+      item.title.toLocaleLowerCase("zh-CN").includes(normalizedQuery);
+    const matchesFilter =
+      filter === "all" ||
+      (filter === "unread" ? !item.read : item.severity === "warning");
+    return matchesQuery && matchesFilter;
+  });
+}
+
 export function ActivityMainWorkspace({
   item,
   onOpenDetails,
@@ -172,7 +256,12 @@ export function ActivityMainWorkspace({
   onOpenDetails: (item: ActivityItemView) => void;
 }) {
   if (!item) {
-    return <EmptyState title="请选择消息" className="min-h-0 flex-1" />;
+    return (
+      <FullScreenEmptyState
+        title="还没有消息"
+        description="当有录音完成或需要处理时，相关消息会显示在这里。"
+      />
+    );
   }
   return (
     <section aria-label="消息详情" className="mx-auto max-w-2xl py-8">
