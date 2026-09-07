@@ -57,10 +57,12 @@ import {
 import { AiSettingsFeature } from "@/features/settings/ai-settings-feature";
 import { LocalModelsFeature } from "@/features/settings/local-models-feature";
 import { RecordingSettingsFeature } from "@/features/settings/recording-settings-feature";
-import { SettingsPageSection } from "@/features/settings/settings-page-section";
+import {
+  SettingsPageSection,
+  SettingsPageSelectionProvider,
+} from "@/features/settings/settings-page-section";
 import {
   isSettingsSection,
-  settingsSectionHeadingId,
   type SettingsSection,
 } from "@/features/settings/settings-section-contract";
 import type { ApplicationSnapshot } from "@shared/contracts";
@@ -76,22 +78,6 @@ const SETTINGS_SECTIONS = [
   { value: "cloud-models", label: "云端模型", icon: Cloud },
 ] as const;
 const EMPTY_ACTIVITY_ITEMS: ActivityItemView[] = [];
-
-function scrollSettingsSectionIntoView(
-  section: SettingsSection,
-  focus = false,
-): boolean {
-  const heading = document.getElementById(settingsSectionHeadingId(section));
-  if (!heading) return false;
-  heading.scrollIntoView({
-    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-      ? "auto"
-      : "smooth",
-    block: "start",
-  });
-  if (focus) heading.focus({ preventScroll: true });
-  return true;
-}
 
 export default function AppRoot() {
   return (
@@ -120,6 +106,10 @@ function App() {
     retryProcessing,
   } = useApplicationShell();
   const applicationBlocked = profileBlocker !== null;
+  const navigateAuthorizedRef = React.useRef(navigateAuthorized);
+  React.useEffect(() => {
+    navigateAuthorizedRef.current = navigateAuthorized;
+  }, [navigateAuthorized]);
   const [messagesOpen, setMessagesOpen] = React.useState(false);
   const persistedSection = snapshot
     ? normalizeRendererSection(snapshot.navigation.section)
@@ -132,6 +122,33 @@ function App() {
     () => parseSectionRoute(current, activeRoute.pathname),
     [activeRoute.pathname, current],
   );
+  const initialSettingsRouteAppliedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (current !== "settings" || initialSettingsRouteAppliedRef.current) {
+      return;
+    }
+    initialSettingsRouteAppliedRef.current = true;
+    const parts = window.location.hash
+      .replace(/^#\/?/, "")
+      .split("/")
+      .filter(Boolean)
+      .map(decodeURIComponent);
+    const category = parts[1];
+    if (
+      parts[0] !== "settings" ||
+      parts.length !== 2 ||
+      !isSettingsSection(category)
+    ) {
+      return;
+    }
+    void navigateSection("settings", `/settings/${category}`, {
+      replace: true,
+    });
+  }, [current]);
+  const settingsSection: SettingsSection =
+    routeDestination.kind === "settings-category"
+      ? routeDestination.categoryId
+      : "general";
   const pane = useContextPaneShell(current);
   const contextPaneWidth = useContextPaneWidth();
   const paneTriggerRef = React.useRef<HTMLButtonElement>(null);
@@ -150,8 +167,6 @@ function App() {
   >(null);
   const [dismissedCaptureDetailSessionId, setDismissedCaptureDetailSessionId] =
     React.useState<string | null>(null);
-  const [settingsSection, setSettingsSection] =
-    React.useState<SettingsSection>("general");
   const [selectedActivityId, setSelectedActivityId] = React.useState<
     string | null
   >(null);
@@ -455,17 +470,6 @@ function App() {
       if (next) applyCompanionRouteView(next);
       return;
     }
-    if (current === "settings") {
-      const category =
-        routeDestination.kind === "settings-category"
-          ? routeDestination.categoryId
-          : "general";
-      window.requestAnimationFrame(() => {
-        if (generation !== routeSyncGenerationRef.current) return;
-        setSettingsSection(category);
-        scrollSettingsSectionIntoView(category);
-      });
-    }
   }, [
     activeRoute.locationKey,
     activityItems,
@@ -498,11 +502,7 @@ function App() {
   const navigateSettingsSection = React.useCallback(
     (value: SettingsSection) => {
       if (applicationBlocked || modalOpen) return;
-      setSettingsSection(value);
       void navigateSection("settings", `/settings/${value}`);
-      window.requestAnimationFrame(() => {
-        scrollSettingsSectionIntoView(value);
-      });
     },
     [applicationBlocked, modalOpen],
   );
@@ -510,19 +510,13 @@ function App() {
     if (applicationBlocked) return;
     const navigateToLocalModels = () => {
       pendingSettingsTargetRef.current = "local-models";
-      setSettingsSection("local-models");
       setMessagesOpen(false);
       void navigateSection("settings", "/settings/local-models");
-      void navigateAuthorized("settings");
+      void navigateAuthorizedRef.current("settings");
     };
     if (modalOpen) requestNavigationAfterModals(navigateToLocalModels);
     else navigateToLocalModels();
-  }, [
-    applicationBlocked,
-    modalOpen,
-    navigateAuthorized,
-    requestNavigationAfterModals,
-  ]);
+  }, [applicationBlocked, modalOpen, requestNavigationAfterModals]);
   React.useEffect(() => {
     if (!applicationBlocked) return;
     let active = true;
@@ -538,58 +532,17 @@ function App() {
       active = false;
     };
   }, [applicationBlocked]);
-  React.useEffect(() => {
-    if (current !== "settings" || !pendingSettingsTargetRef.current) return;
-    const target = pendingSettingsTargetRef.current;
-    const frame = window.requestAnimationFrame(() => {
-      if (!scrollSettingsSectionIntoView(target, true)) return;
-      pendingSettingsTargetRef.current = null;
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [current]);
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (current !== "settings") return;
     const container = mainContentRef.current;
     if (!container) return;
-    const sections = Array.from(
-      container.querySelectorAll<HTMLElement>("[data-settings-section]"),
-    ).flatMap((element) => {
-      const section = element.dataset.settingsSection;
-      return isSettingsSection(section) ? [{ element, section }] : [];
-    });
-    if (sections.length === 0) return;
-    let frame: number | null = null;
-    const updateActiveSection = () => {
-      if (frame !== null) return;
-      frame = window.requestAnimationFrame(() => {
-        frame = null;
-        const marker = container.getBoundingClientRect().top + 32;
-        let next = sections[0]!.section;
-        for (const candidate of sections) {
-          if (candidate.element.getBoundingClientRect().top > marker) break;
-          next = candidate.section;
-        }
-        if (
-          container.scrollHeight -
-            container.scrollTop -
-            container.clientHeight <=
-          2
-        ) {
-          next = sections.at(-1)!.section;
-        }
-        setSettingsSection((currentSection) =>
-          currentSection === next ? currentSection : next,
-        );
-      });
-    };
-    container.addEventListener("scroll", updateActiveSection, {
-      passive: true,
-    });
-    return () => {
-      container.removeEventListener("scroll", updateActiveSection);
-      if (frame !== null) window.cancelAnimationFrame(frame);
-    };
-  }, [current]);
+    container.scrollTop = 0;
+    if (pendingSettingsTargetRef.current !== settingsSection) return;
+    const heading = contentTitleRef.current;
+    if (!heading) return;
+    pendingSettingsTargetRef.current = null;
+    heading.focus({ preventScroll: true });
+  }, [activeRoute.locationKey, current, settingsSection]);
   React.useEffect(() => {
     if (pane.open || !paneTriggerFocusPendingRef.current) return;
     paneTriggerFocusPendingRef.current = false;
@@ -605,7 +558,6 @@ function App() {
     audio,
     companion,
     selectedActivity,
-    activityItems,
   });
   const contentTitle = routeTitle(
     routeDestination,
@@ -615,13 +567,20 @@ function App() {
     companion,
   );
   const paneStructurallyAvailable =
-    current !== "audio" || audio.libraryPresentation === "populated";
+    (current !== "audio" || audio.libraryPresentation === "populated") &&
+    (current !== "messages" || activityItems.length > 0);
   const audioWorkspacePresentation =
     current === "audio" && !captureDetailVisible;
   const audioFirstUsePresentation =
     audioWorkspacePresentation &&
     audio.libraryPresentation === "true-empty" &&
     snapshot.capture.phase === "idle";
+  const messageEmptyPresentation =
+    current === "messages" &&
+    !captureDetailVisible &&
+    activityItems.length === 0;
+  const fullScreenEmptyPresentation =
+    audioFirstUsePresentation || messageEmptyPresentation;
   return (
     <AppShellFrame
       section={current}
@@ -715,7 +674,7 @@ function App() {
       onTogglePane={requestPaneToggle}
       title={contentTitle}
       titleRef={contentTitleRef}
-      showHeader={!audioFirstUsePresentation}
+      showHeader={!fullScreenEmptyPresentation}
       history={{
         canGoBack: activeRoute.canGoBack,
         canGoForward: activeRoute.canGoForward,
@@ -731,11 +690,11 @@ function App() {
       contentRef={mainContentRef}
       contentPadding={
         presentation.contentMode === "padded"
-          ? audioWorkspacePresentation
-            ? audioFirstUsePresentation
-              ? "none"
-              : "compact"
-            : "page"
+          ? fullScreenEmptyPresentation
+            ? "none"
+            : audioWorkspacePresentation
+              ? "compact"
+              : "page"
           : "none"
       }
       contentTone={current === "settings" ? "muted" : "default"}
@@ -753,6 +712,7 @@ function App() {
                 current={current}
                 selectedActivity={selectedActivity}
                 onOpenActivityDetails={openActivityDetails}
+                settingsSection={settingsSection}
               />
             ) : null}
             <CaptureWorkspace
@@ -862,6 +822,7 @@ function ShellContent({
   current,
   selectedActivity,
   onOpenActivityDetails,
+  settingsSection,
 }: {
   snapshot: ApplicationSnapshot;
   operationError: string | null;
@@ -871,6 +832,7 @@ function ShellContent({
   current: RendererShellSection;
   selectedActivity: ActivityItemView | null;
   onOpenActivityDetails: (item: ActivityItemView) => void;
+  settingsSection: SettingsSection;
 }) {
   if (snapshot.profile.phase === "initializing") {
     return (
@@ -927,7 +889,7 @@ function ShellContent({
       );
       break;
     case "settings":
-      section = <SettingsContent />;
+      section = <SettingsContent section={settingsSection} />;
       break;
     case "messages":
       section = (
@@ -969,16 +931,13 @@ function SettingsContextPane({
                     size="context"
                     data-active={value === item.value}
                   >
-                    <a
-                      href={`#${settingsSectionHeadingId(item.value)}`}
+                    <button
+                      type="button"
                       data-flat-row="true"
                       aria-current={
                         value === item.value ? "location" : undefined
                       }
-                      onClick={(event) => {
-                        event.preventDefault();
-                        onValueChange(item.value);
-                      }}
+                      onClick={() => onValueChange(item.value)}
                     >
                       <ItemMedia variant="icon">
                         <Icon aria-hidden="true" />
@@ -986,7 +945,7 @@ function SettingsContextPane({
                       <ItemContent>
                         <ItemTitle>{item.label}</ItemTitle>
                       </ItemContent>
-                    </a>
+                    </button>
                   </Item>
                 </li>
               );
@@ -998,19 +957,31 @@ function SettingsContextPane({
   );
 }
 
-const SettingsContent = React.memo(function SettingsContent() {
+const SettingsContent = React.memo(function SettingsContent({
+  section,
+}: {
+  section: SettingsSection;
+}) {
   return (
     <div data-settings-page="true" className="min-h-full bg-muted/20">
-      <div className="mx-auto w-full max-w-4xl space-y-8 px-4 py-6 sm:px-6 lg:px-10">
-        <SettingsPageSection section="general" title="通用" />
-        <SettingsPageSection section="recording" title="录制">
-          <RecordingSettingsFeature />
-        </SettingsPageSection>
-        <SettingsPageSection section="local-models" title="本地模型">
-          <LocalModelsFeature />
-        </SettingsPageSection>
-        <AiSettingsFeature settingsPage />
-      </div>
+      <SettingsPageSelectionProvider value={section}>
+        <SettingsPanels />
+      </SettingsPageSelectionProvider>
+    </div>
+  );
+});
+
+const SettingsPanels = React.memo(function SettingsPanels() {
+  return (
+    <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 lg:px-10">
+      <SettingsPageSection section="general" label="通用" />
+      <SettingsPageSection section="recording" label="录制">
+        <RecordingSettingsFeature />
+      </SettingsPageSection>
+      <SettingsPageSection section="local-models" label="本地模型">
+        <LocalModelsFeature />
+      </SettingsPageSection>
+      <AiSettingsFeature settingsPage />
     </div>
   );
 });
@@ -1132,7 +1103,7 @@ function routeTitle(
   if (route.kind === "audio-index") return fallback ?? "音频";
   if (route.kind === "message-index") return fallback ?? "消息";
   if (route.kind === "companion-index") return fallback ?? "互联";
-  return "设置";
+  return "通用";
 }
 
 type ContentPresentation = {
@@ -1147,14 +1118,12 @@ function deriveContentPresentation({
   audio,
   companion,
   selectedActivity,
-  activityItems,
 }: {
   captureDetailVisible: boolean;
   current: RendererShellSection;
   audio: AudioRouteController;
   companion: CompanionRouteController;
   selectedActivity: ActivityItemView | null;
-  activityItems: ActivityItemView[];
 }): ContentPresentation {
   if (captureDetailVisible) {
     return {
@@ -1184,7 +1153,7 @@ function deriveContentPresentation({
     return {
       title: selectedActivity?.title ?? null,
       contentMode: "padded",
-      renderContent: activityItems.length > 0,
+      renderContent: true,
     };
   }
   if (companion.view.kind === "history") {

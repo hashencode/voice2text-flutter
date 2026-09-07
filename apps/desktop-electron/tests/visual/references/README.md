@@ -18,9 +18,9 @@ content origin. Voice2Text now deliberately differs: its product context pane
 defaults to 300px, is adjustable at runtime from 240px through 480px, shares one
 requested width across the four main sections, and temporarily clamps without
 overwriting that request when the window narrows. This product delta does not
-alter the reference image, DOM evidence, geometry, or checksums. Actual rendered
-product acceptance and width-sensitive golden refresh remain pending explicit
-visual-validation authorization.
+alter the reference image, DOM evidence, geometry, or checksums. Authorized
+rendered product acceptance and the width-sensitive golden refresh completed on
+2026-09-04.
 
 The image and render record govern the observed ReUI shell composition,
 fixed-column geometry, density, divider placement, control placement and state

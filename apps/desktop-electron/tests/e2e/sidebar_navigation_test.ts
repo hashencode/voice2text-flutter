@@ -76,7 +76,19 @@ function applicationApi(
     assignAudioSpeaker: vi.fn(),
     controlAudioPlayback: vi.fn(),
     exportAudio: vi.fn(),
-    preflightCapture: vi.fn(),
+    preflightCapture: vi.fn(async () => ({
+      minimumMacosVersion: "13.0",
+      systemAudioMinimumMacosVersion: "13.0",
+      captureMode: "dual_track" as const,
+      systemAudioPermission: "granted" as const,
+      microphonePermission: "granted" as const,
+      microphones: [],
+      availableBytes: 8 * 1024 ** 3,
+      requiredBytes: 2 * 1024 ** 3,
+      captionModelAvailable: true,
+      canStart: true,
+      blockingReasons: [],
+    })),
     startCapture: vi.fn(),
     controlCapture: vi.fn(),
     listCaptureRecoveries: vi.fn(async () => []),
@@ -191,6 +203,78 @@ describe("sidebar navigation e2e", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("restores the latest settings category after leaving the section", async () => {
+    const { api } = applicationApi(restored);
+    const user = userEvent.setup();
+    render(createElement(App));
+
+    const navigation = await screen.findByRole("navigation", {
+      name: "工作站主导航",
+    });
+    await user.click(within(navigation).getByRole("button", { name: "设置" }));
+    await waitFor(() => expect(api.navigate).toHaveBeenCalledWith("settings"));
+
+    const settingsNavigation = screen.getByRole("navigation", {
+      name: "设置分类",
+    });
+    const general = within(settingsNavigation).getByRole("button", {
+      name: "通用",
+    });
+    const recording = within(settingsNavigation).getByRole("button", {
+      name: "录制",
+    });
+    const localModels = within(settingsNavigation).getByRole("button", {
+      name: "本地模型",
+    });
+    expect(general).toHaveAttribute("aria-current", "location");
+    expect(
+      within(settingsNavigation).queryByRole("link", { name: "通用" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(recording);
+    await user.click(localModels);
+    expect(
+      screen.getByRole("heading", { level: 1, name: "本地模型" }),
+    ).toBeVisible();
+    expect(localModels).toHaveAttribute("aria-current", "location");
+    expect(
+      document.querySelectorAll("[data-settings-section]:not([hidden])"),
+    ).toHaveLength(1);
+
+    await user.click(within(navigation).getByRole("button", { name: "音频" }));
+    await waitFor(() => expect(api.navigate).toHaveBeenCalledWith("library"));
+    await user.click(within(navigation).getByRole("button", { name: "设置" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { level: 1, name: "本地模型" }),
+      ).toBeVisible(),
+    );
+    const restoredSettingsNavigation = screen.getByRole("navigation", {
+      name: "设置分类",
+    });
+    expect(
+      within(restoredSettingsNavigation).getByRole("button", {
+        name: "本地模型",
+      }),
+    ).toHaveAttribute("aria-current", "location");
+    expect(
+      document.querySelectorAll("[data-settings-section]:not([hidden])"),
+    ).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "后退" }));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "录制" }),
+    ).toBeVisible();
+    expect(
+      within(restoredSettingsNavigation).getByRole("button", {
+        name: "录制",
+      }),
+    ).toHaveAttribute("aria-current", "location");
+    expect(
+      document.querySelectorAll("[data-settings-section]:not([hidden])"),
+    ).toHaveLength(1);
+  });
+
   it.each(["tasks", "library"])(
     "normalizes the legacy /%s deep link to Audio once",
     async (legacySection) => {
@@ -239,7 +323,7 @@ describe("sidebar navigation e2e", () => {
     const user = userEvent.setup();
     render(createElement(App));
 
-    const pane = await screen.findByRole("complementary", {
+    let pane = await screen.findByRole("complementary", {
       name: "音频上下文面板",
     });
     const wrapper = document.querySelector<HTMLElement>(
@@ -264,8 +348,15 @@ describe("sidebar navigation e2e", () => {
     expect(screen.queryByText("启动恢复需要确认")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "消息" }));
     expect(
-      screen.getByRole("complementary", { name: "消息上下文面板" }),
-    ).toHaveTextContent("暂无消息");
+      await screen.findByRole("region", { name: "还没有消息" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("complementary", { name: "消息上下文面板" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "音频" }));
+    pane = await screen.findByRole("complementary", {
+      name: "音频上下文面板",
+    });
     expect(writes).not.toHaveBeenCalled();
 
     window.innerWidth = 1280;
@@ -328,6 +419,19 @@ describe("sidebar navigation e2e", () => {
       ...restored,
       navigation: { section: "library" },
       library: { phase: "ready", audioCount: 1 },
+      activity: [
+        {
+          id: "resize-shared-width",
+          kind: "capture_completed",
+          captureSessionId: "capture-resize-shared-width",
+          createdAt: 2,
+          title: "共享宽度验证",
+          severity: "info",
+          read: true,
+          resolved: true,
+          detailTarget: "capture-details",
+        },
+      ],
       capture: { phase: "idle" },
     });
     const writes = vi.spyOn(Storage.prototype, "setItem");

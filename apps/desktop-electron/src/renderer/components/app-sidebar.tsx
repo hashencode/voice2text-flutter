@@ -54,6 +54,7 @@ export function AppSidebar({
     <Sidebar
       collapsible="icon"
       mobileMode="inline"
+      suppressTransitionKey={current}
       data-presentation={presentation}
       className="z-20 overflow-hidden *:data-[sidebar=sidebar]:flex-row data-[presentation=overlay]:!w-[min(var(--sidebar-width),100vw)]"
     >

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -39,11 +39,26 @@ describe("activity pages", () => {
 
   it("uses an empty state when no message is selected", () => {
     render(<ActivityMainWorkspace item={null} onOpenDetails={vi.fn()} />);
-    const empty = screen.getByRole("heading", {
-      name: "请选择消息",
-    }).parentElement!;
-    expect(empty).toHaveTextContent("请选择消息");
-    expect(empty.querySelector("p")).toBeNull();
+    const empty = screen
+      .getByRole("heading", { name: "还没有消息" })
+      .closest<HTMLElement>('[data-slot="full-screen-empty-state"]')!;
+    expect(empty).toBeVisible();
+    expect(empty).toHaveTextContent(
+      "当有录音完成或需要处理时，相关消息会显示在这里。",
+    );
+    expect(
+      empty.querySelector('[data-slot="full-screen-empty-state-illustration"]'),
+    ).not.toBeNull();
+    expect(
+      empty.querySelector('[data-slot="full-screen-empty-state-graphic"]'),
+    ).toBeInstanceOf(SVGElement);
+    expect(
+      empty
+        .querySelector('[data-slot="full-screen-empty-state-graphic"]')
+        ?.querySelectorAll("polygon"),
+    ).toHaveLength(3);
+    expect(empty.querySelector("svg.lucide-inbox")).toBeNull();
+    expect(within(empty).queryByRole("button")).toBeNull();
   });
 
   it("selects a summary from the second column and renders full detail", async () => {

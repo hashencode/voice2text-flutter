@@ -15,7 +15,8 @@ export type VisualScenario =
   | "activity-messages"
   | "settings"
   | "audio-recovery"
-  | "companion-devices";
+  | "companion-devices"
+  | "pane-resize";
 
 export interface VisualRendererFixture {
   application: ApplicationSnapshot;
@@ -55,7 +56,7 @@ export function buildVisualFixture(
       library: { phase: "ready", audioCount: audios.length },
       reconciliation: [],
       activity:
-        scenario === "activity-messages"
+        scenario === "activity-messages" || scenario === "pane-resize"
           ? [
               {
                 id: "activity-visual-warning",

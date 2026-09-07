@@ -21,7 +21,10 @@ import type {
   ProcessingTask,
   Voice2TextDesktopApi,
 } from "../../../src/shared/contracts";
-import { companionRendererStubs } from "../../fixtures/companion";
+import {
+  companionRendererStubs,
+  localModelSnapshot,
+} from "../../fixtures/companion";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -114,6 +117,12 @@ describe("render-backed shell frame", () => {
       "px-4",
       "gap-1.5",
     );
+    expect(screen.queryByRole("button", { name: "前进" })).toBeNull();
+    expect(
+      main.querySelector(
+        '[data-shell-slot="content-head"] [data-slot="separator"]',
+      ),
+    ).toHaveClass("mx-2");
     expect(screen.getByRole("heading", { level: 1 })).toHaveClass(
       "min-w-0",
       "flex-1",
@@ -144,6 +153,97 @@ describe("render-backed shell frame", () => {
     );
     expect(main).not.toHaveClass(
       "ml-[calc(var(--sidebar-width)-var(--sidebar-width-icon)-1px)]",
+    );
+  });
+
+  it("suppresses pane transitions only while the primary section changes", () => {
+    const transitionsAtLayout: string[][] = [];
+    const layoutRead = vi
+      .spyOn(HTMLElement.prototype, "offsetWidth", "get")
+      .mockImplementation(function (this: HTMLElement) {
+        const container = this.parentElement?.querySelector<HTMLElement>(
+          '[data-slot="sidebar-container"]',
+        );
+        transitionsAtLayout.push([
+          this.style.transition,
+          container?.style.transition ?? "",
+        ]);
+        return 0;
+      });
+
+    const frame = (section: "audio" | "settings", open: boolean) => (
+      <AppShellFrame
+        section={section}
+        onNavigate={vi.fn()}
+        unreadActivityCount={0}
+        contextPane={{
+          open,
+          section,
+          presentation: "docked",
+          onRequestClose: vi.fn(),
+          children: <span>{section} pane</span>,
+        }}
+        contextPaneWidth={300}
+        onTogglePane={vi.fn()}
+        title={`${section} page`}
+        history={{
+          canGoBack: false,
+          canGoForward: false,
+          onBack: vi.fn(),
+          onForward: vi.fn(),
+        }}
+      >
+        {section} content
+      </AppShellFrame>
+    );
+
+    const view = render(frame("audio", true));
+    const gap = () => view.container.querySelector('[data-slot="sidebar-gap"]');
+    const container = () =>
+      view.container.querySelector('[data-slot="sidebar-container"]');
+    expect(gap()).not.toHaveClass("transition-none");
+    expect(container()).not.toHaveClass("transition-none");
+    expect(layoutRead).not.toHaveBeenCalled();
+
+    view.rerender(frame("settings", false));
+    expect(layoutRead).toHaveBeenCalledOnce();
+    expect(transitionsAtLayout).toEqual([["none", "none"]]);
+    expect((gap() as HTMLElement).style.transition).toBe("");
+    expect((container() as HTMLElement).style.transition).toBe("");
+    expect(gap()).toHaveClass("transition-[width]", "duration-200");
+    expect(container()).toHaveClass(
+      "transition-[left,right,width]",
+      "duration-200",
+    );
+
+    view.rerender(frame("audio", true));
+    expect(layoutRead).toHaveBeenCalledTimes(2);
+    expect(transitionsAtLayout).toEqual([
+      ["none", "none"],
+      ["none", "none"],
+    ]);
+    expect((gap() as HTMLElement).style.transition).toBe("");
+    expect((container() as HTMLElement).style.transition).toBe("");
+    expect(gap()).toHaveClass("transition-[width]", "duration-200");
+    expect(container()).toHaveClass(
+      "transition-[left,right,width]",
+      "duration-200",
+    );
+
+    view.rerender(frame("audio", false));
+    expect(layoutRead).toHaveBeenCalledTimes(2);
+    expect(gap()).toHaveClass("transition-[width]", "duration-200");
+    expect(container()).toHaveClass(
+      "transition-[left,right,width]",
+      "duration-200",
+    );
+
+    view.rerender(frame("audio", true));
+    expect(layoutRead).toHaveBeenCalledTimes(2);
+    expect(gap()).toHaveClass("transition-[width]", "duration-200");
+    expect(container()).toHaveClass(
+      "transition-[left,right,width]",
+      "duration-200",
     );
   });
 
@@ -398,7 +498,7 @@ function testAiProfile() {
 }
 
 describe("application shell", () => {
-  it("keeps page history native, branchable, and isolated by module", async () => {
+  it("keeps back history branchable and isolated by module", async () => {
     const audioB = { ...shellAudio, audioId: 2, displayName: "音频 B.wav" };
     const audioC = { ...shellAudio, audioId: 3, displayName: "音频 C.wav" };
     installApi(
@@ -427,16 +527,16 @@ describe("application shell", () => {
     expect(
       await screen.findByRole("heading", { level: 1, name: "音频 A.wav" }),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "前进" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "前进" })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "打开 音频 C.wav" }));
     expect(
       await screen.findByRole("heading", { level: 1, name: "音频 C.wav" }),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "前进" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "前进" })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "设置" }));
-    await user.click(await screen.findByRole("link", { name: "云端模型" }));
+    await user.click(await screen.findByRole("button", { name: "云端模型" }));
     expect(
       screen.getByRole("heading", { level: 1, name: "云端模型" }),
     ).toBeVisible();
@@ -498,8 +598,54 @@ describe("application shell", () => {
     expect(document.querySelector('[data-mobile="true"]')).toBeNull();
   });
 
+  it("selects the local models settings panel from the initial route", async () => {
+    window.history.replaceState(null, "", "/#/settings/local-models");
+    installApi({
+      ...readySnapshot,
+      navigation: { section: "settings" },
+      capture: { phase: "idle" },
+    });
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: "本地模型", level: 1 }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "本地模型", level: 2 }),
+    ).not.toBeInTheDocument();
+
+    const settingsPane = screen.getByRole("complementary", {
+      name: "设置上下文面板",
+    });
+    expect(
+      within(settingsPane).getByRole("button", { name: "本地模型" }),
+    ).toHaveAttribute("aria-current", "location");
+
+    const settingsSections = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-settings-section]"),
+    );
+    expect(settingsSections.filter((section) => !section.hidden)).toHaveLength(
+      1,
+    );
+    expect(
+      document.querySelector('[data-settings-section="general"]'),
+    ).toHaveAttribute("hidden");
+    expect(
+      screen.queryByRole("heading", { name: "通用", level: 2 }),
+    ).not.toBeInTheDocument();
+  });
+
   it("uses the render-backed nested shell geometry and landmarks", async () => {
-    const api = installApi({ ...readySnapshot, capture: { phase: "idle" } });
+    const getLocalModelSnapshot = vi.fn(async () => localModelSnapshot);
+    const onLocalModelSnapshot = vi.fn(() => () => undefined);
+    const api = installApi(
+      { ...readySnapshot, capture: { phase: "idle" } },
+      { getLocalModelSnapshot, onLocalModelSnapshot },
+    );
+    const getFloatingCapturePreference = vi.mocked(
+      api.getFloatingCapturePreference!,
+    );
     const user = userEvent.setup();
     render(<App />);
 
@@ -690,10 +836,27 @@ describe("application shell", () => {
     expect(document.querySelector("[data-settings-page]")).toHaveClass(
       "bg-muted/20",
     );
+    await waitFor(() => {
+      expect(api.preflightCapture).toHaveBeenCalled();
+      expect(getFloatingCapturePreference).toHaveBeenCalled();
+      expect(api.getAiSettings).toHaveBeenCalled();
+      expect(getLocalModelSnapshot).toHaveBeenCalled();
+      expect(onLocalModelSnapshot).toHaveBeenCalled();
+    });
+    const settingsInitializationCounts = {
+      preflight: vi.mocked(api.preflightCapture).mock.calls.length,
+      floatingCapture: getFloatingCapturePreference.mock.calls.length,
+      ai: vi.mocked(api.getAiSettings).mock.calls.length,
+      localModels: getLocalModelSnapshot.mock.calls.length,
+      localModelSubscription: onLocalModelSnapshot.mock.calls.length,
+    };
+    expect(
+      screen.getByRole("heading", { name: "通用", level: 1 }),
+    ).toBeVisible();
     for (const heading of ["通用", "录制", "本地模型", "云端模型"]) {
       expect(
-        screen.getByRole("heading", { name: heading, level: 2 }),
-      ).toBeVisible();
+        screen.queryByRole("heading", { name: heading, level: 2 }),
+      ).not.toBeInTheDocument();
     }
     expect(
       within(settingsPane).queryByRole("link", { name: "隐私与安全" }),
@@ -701,15 +864,82 @@ describe("application shell", () => {
     expect(
       screen.queryByRole("heading", { name: "隐私与安全", level: 2 }),
     ).not.toBeInTheDocument();
-    const floatingCaptureRow = screen.getByRole("switch", {
-      name: "悬浮控制条",
-    }).parentElement;
     const generalSection = document.querySelector(
       '[data-settings-section="general"]',
     );
     const recordingSection = document.querySelector(
       '[data-settings-section="recording"]',
     );
+    const localModelsSection = document.querySelector(
+      '[data-settings-section="local-models"]',
+    );
+    const cloudModelsSection = document.querySelector(
+      '[data-settings-section="cloud-models"]',
+    );
+    expect(generalSection).not.toHaveAttribute("hidden");
+    expect(recordingSection).toHaveAttribute("hidden");
+    expect(localModelsSection).toHaveAttribute("hidden");
+    expect(cloudModelsSection).toHaveAttribute("hidden");
+    expect(
+      screen.queryByRole("region", { name: "音频智能设置" }),
+    ).not.toBeInTheDocument();
+
+    const settingsNavigation = within(settingsPane).getByRole("navigation", {
+      name: "设置分类",
+    });
+    const generalSetting = within(settingsNavigation).getByRole("button", {
+      name: "通用",
+    });
+    const recordingSetting = within(settingsNavigation).getByRole("button", {
+      name: "录制",
+    });
+    const localModelsSetting = within(settingsNavigation).getByRole("button", {
+      name: "本地模型",
+    });
+    const cloudSetting = within(settingsNavigation).getByRole("button", {
+      name: "云端模型",
+    });
+    expect(
+      within(settingsNavigation)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["通用", "录制", "本地模型", "云端模型"]);
+    expect(
+      settingsNavigation.querySelector("a[href^='#settings-section-']"),
+    ).not.toBeInTheDocument();
+    expect(generalSetting).toHaveAttribute("data-active", "true");
+    expect(generalSetting).toHaveAttribute("aria-current", "location");
+    expect(generalSetting).toHaveClass(
+      "aria-[current=location]:bg-accent/60",
+      "rounded-none",
+    );
+    expect(generalSetting).toHaveAttribute("data-slot", "item");
+    expect(generalSetting).toHaveAttribute("data-variant", "context");
+    expect(localModelsSetting).toHaveAttribute("data-active", "false");
+    const scrollIntoView = vi.spyOn(HTMLElement.prototype, "scrollIntoView");
+    Object.defineProperty(settingsContent!, "scrollTop", {
+      configurable: true,
+      value: 300,
+      writable: true,
+    });
+    await user.click(recordingSetting);
+    expect(
+      await screen.findByRole("heading", { name: "录制", level: 1 }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "录制", level: 2 }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "通用", level: 2 }),
+    ).not.toBeInTheDocument();
+    expect(generalSection).toHaveAttribute("hidden");
+    expect(recordingSection).not.toHaveAttribute("hidden");
+    expect(settingsContent).toHaveProperty("scrollTop", 0);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(recordingSetting).toHaveFocus();
+    const floatingCaptureRow = screen.getByRole("switch", {
+      name: "悬浮控制条",
+    }).parentElement;
     expect(generalSection).not.toContainElement(floatingCaptureRow);
     expect(recordingSection).toContainElement(floatingCaptureRow);
     expect(floatingCaptureRow).toHaveAttribute("data-slot", "field");
@@ -731,58 +961,22 @@ describe("application shell", () => {
     await user.click(screen.getByRole("switch", { name: "悬浮控制条" }));
     expect(api.setFloatingCapturePreference).toHaveBeenCalledOnce();
     expect(api.setFloatingCapturePreference).toHaveBeenCalledWith(true);
-    const generalSetting = within(settingsPane).getByRole("link", {
-      name: "通用",
-    });
-    const recordingSetting = within(settingsPane).getByRole("link", {
-      name: "录制",
-    });
-    const localModelsSetting = within(settingsPane).getByRole("link", {
-      name: "本地模型",
-    });
-    expect(
-      within(settingsPane)
-        .getAllByRole("link")
-        .map((link) => link.textContent),
-    ).toEqual(["通用", "录制", "本地模型", "云端模型"]);
-    expect(generalSetting).toHaveAttribute("data-active", "true");
-    expect(generalSetting).toHaveAttribute("aria-current", "location");
-    expect(generalSetting).toHaveClass(
-      "aria-[current=location]:bg-accent/60",
-      "rounded-none",
-    );
-    expect(generalSetting).toHaveAttribute("data-slot", "item");
-    expect(generalSetting).toHaveAttribute("data-variant", "context");
-    expect(localModelsSetting).toHaveAttribute("data-active", "false");
-    const recordingHeading = screen.getByRole("heading", {
-      name: "录制",
-      level: 2,
-    });
-    const recordingScrollIntoView = vi.spyOn(
-      recordingHeading,
-      "scrollIntoView",
-    );
-    await user.click(recordingSetting);
-    await waitFor(() =>
-      expect(recordingScrollIntoView).toHaveBeenCalledWith({
-        behavior: "smooth",
-        block: "start",
-      }),
-    );
     expect(recordingSetting).toHaveAttribute("aria-current", "location");
     expect(generalSetting).not.toHaveAttribute("aria-current");
-    const localModelsHeading = screen.getByRole("heading", {
-      name: "本地模型",
-      level: 2,
-    });
-    const scrollIntoView = vi.spyOn(localModelsHeading, "scrollIntoView");
     await user.click(localModelsSetting);
-    await waitFor(() =>
-      expect(scrollIntoView).toHaveBeenCalledWith({
-        behavior: "smooth",
-        block: "start",
-      }),
-    );
+    expect(
+      await screen.findByRole("heading", { name: "本地模型", level: 1 }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "本地模型", level: 2 }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "录制", level: 2 }),
+    ).not.toBeInTheDocument();
+    expect(localModelsSection).not.toHaveAttribute("hidden");
+    expect(recordingSection).toHaveAttribute("hidden");
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(localModelsSetting).toHaveFocus();
     expect(localModelsSetting).toHaveAttribute("data-active", "true");
     expect(localModelsSetting).toHaveAttribute("aria-current", "location");
     expect(generalSetting).toHaveAttribute("data-active", "false");
@@ -791,44 +985,58 @@ describe("application shell", () => {
     expect(
       await screen.findByRole("region", { name: "本地模型设置" }),
     ).toBeVisible();
-    expect(
-      screen.getByRole("switch", {
-        name: "悬浮控制条",
-      }),
-    ).toBeVisible();
 
-    const cloudSetting = within(settingsPane).getByRole("link", {
-      name: "云端模型",
-    });
+    settingsContent!.scrollTop = 240;
+    fireEvent.scroll(settingsContent!);
+    expect(localModelsSetting).toHaveAttribute("aria-current", "location");
+    expect(settingsContent).toHaveProperty("scrollTop", 240);
+
+    await user.click(cloudSetting);
+    expect(
+      await screen.findByRole("heading", { name: "云端模型", level: 1 }),
+    ).toBeVisible();
+    expect(cloudModelsSection).not.toHaveAttribute("hidden");
+    expect(localModelsSection).toHaveAttribute("hidden");
+    await user.click(screen.getByRole("button", { name: "新增云端模型" }));
+    expect(
+      await screen.findByRole("dialog", { name: "新增云端模型" }),
+    ).toBeVisible();
+    fireEvent.click(recordingSetting);
+    expect(cloudSetting).toHaveAttribute("aria-current", "location");
+    expect(recordingSetting).not.toHaveAttribute("aria-current");
+    expect(cloudModelsSection).not.toHaveAttribute("hidden");
+    await user.click(screen.getByRole("button", { name: "关闭" }));
+    await user.click(screen.getByRole("button", { name: "后退" }));
+    expect(
+      await screen.findByRole("heading", { name: "本地模型", level: 1 }),
+    ).toBeVisible();
+    expect(localModelsSetting).toHaveAttribute("aria-current", "location");
+    expect(localModelsSection).not.toHaveAttribute("hidden");
+    expect(cloudModelsSection).toHaveAttribute("hidden");
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-settings-section="recording"]')).toBe(
+      recordingSection,
+    );
+    expect(
+      document.querySelector('[data-settings-section="local-models"]'),
+    ).toBe(localModelsSection);
+    expect(vi.mocked(api.preflightCapture).mock.calls).toHaveLength(
+      settingsInitializationCounts.preflight,
+    );
+    expect(getFloatingCapturePreference.mock.calls).toHaveLength(
+      settingsInitializationCounts.floatingCapture,
+    );
+    expect(vi.mocked(api.getAiSettings).mock.calls).toHaveLength(
+      settingsInitializationCounts.ai,
+    );
+    expect(getLocalModelSnapshot.mock.calls).toHaveLength(
+      settingsInitializationCounts.localModels,
+    );
+    expect(onLocalModelSnapshot.mock.calls).toHaveLength(
+      settingsInitializationCounts.localModelSubscription,
+    );
     expect(cloudSetting.querySelector(".lucide-cloud")).not.toBeNull();
     expect(cloudSetting.querySelector(".lucide-bot")).toBeNull();
-    const sectionPositions = {
-      general: -300,
-      recording: -220,
-      "local-models": -120,
-      "cloud-models": 20,
-    } as const;
-    vi.spyOn(settingsContent!, "getBoundingClientRect").mockReturnValue({
-      top: 0,
-    } as DOMRect);
-    for (const section of settingsContent!.querySelectorAll<HTMLElement>(
-      "[data-settings-section]",
-    )) {
-      vi.spyOn(section, "getBoundingClientRect").mockReturnValue({
-        top: sectionPositions[
-          section.dataset.settingsSection as keyof typeof sectionPositions
-        ],
-      } as DOMRect);
-    }
-    Object.defineProperties(settingsContent!, {
-      scrollHeight: { configurable: true, value: 1200 },
-      scrollTop: { configurable: true, value: 300, writable: true },
-      clientHeight: { configurable: true, value: 600 },
-    });
-    fireEvent.scroll(settingsContent!);
-    await waitFor(() =>
-      expect(cloudSetting).toHaveAttribute("aria-current", "location"),
-    );
   });
 
   it("does not expose the Sidebar cookie or Meta/Ctrl+B state authority", async () => {
@@ -849,6 +1057,43 @@ describe("application shell", () => {
     expect(event.defaultPrevented).toBe(false);
     expect(pane).toBeVisible();
     expect(document.cookie).not.toContain("sidebar_state=");
+  });
+
+  it("focuses the visible local-model heading only for the programmatic settings entry", async () => {
+    const api = installApi(
+      {
+        ...readySnapshot,
+        capability: {
+          processing: "unavailable",
+          reason: "当前设备缺少本地处理运行时",
+        },
+        capture: { phase: "idle" },
+      },
+      {
+        openAudio: vi.fn(async () => shellWorkspace(shellAudio)),
+      },
+    );
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "打开 音频 A.wav" }),
+    );
+    await user.click(screen.getByRole("button", { name: "开始转写" }));
+    await user.click(
+      await screen.findByRole("button", { name: "前往本地模型" }),
+    );
+    await waitFor(() => expect(api.navigate).toHaveBeenCalledWith("settings"));
+
+    const localModelsHeading = await screen.findByRole("heading", {
+      name: "本地模型",
+      level: 1,
+    });
+    expect(localModelsHeading).toHaveFocus();
+    expect(localModelsHeading).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "录制", level: 2 }),
+    ).not.toBeInTheDocument();
   });
 
   it("restores recording in the content area without global header controls", async () => {
@@ -1238,16 +1483,63 @@ describe("application shell", () => {
     ).toBeVisible();
   });
 
-  it("restores a collapsed message pane preference", async () => {
+  it("hides the message chrome while empty and restores the saved pane state when a message arrives", async () => {
     window.localStorage.setItem(
       "voice2text.shell.context-panes.v1",
       JSON.stringify({ messages: "closed" }),
     );
-    installApi({ ...readySnapshot, capture: { phase: "idle" } });
+    let publish: ((snapshot: ApplicationSnapshot) => void) | undefined;
+    const initial = { ...readySnapshot, capture: { phase: "idle" as const } };
+    installApi(initial, {
+      onApplicationSnapshot: vi.fn((listener) => {
+        publish = listener;
+        return () => undefined;
+      }),
+    });
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(await screen.findByRole("button", { name: "消息" }));
+    expect(screen.getByRole("heading", { name: "还没有消息" })).toBeVisible();
+    expect(
+      document.querySelector('[data-shell-slot="content-head"]'),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("complementary", { name: "消息上下文面板" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "打开消息上下文面板" }),
+    ).not.toBeInTheDocument();
+    expect(document.getElementById("main-content")).not.toHaveClass("p-4");
+
+    act(() =>
+      publish?.({
+        ...initial,
+        revision: initial.revision + 1,
+        activity: [
+          {
+            id: "capture:completed:message-restored",
+            kind: "capture_completed",
+            captureSessionId: "message-restored",
+            createdAt: 100,
+            title: "录音已完成",
+            severity: "info",
+            read: true,
+            resolved: true,
+            detailTarget: "capture-details",
+          },
+        ],
+      }),
+    );
+
+    expect(screen.queryByText("还没有消息")).not.toBeInTheDocument();
+    expect(
+      document.querySelector('[data-shell-slot="content-head"]'),
+    ).toBeVisible();
+    expect(document.getElementById("main-content")).toHaveClass(
+      "p-4",
+      "sm:p-6",
+    );
     expect(
       screen.queryByRole("complementary", { name: "消息上下文面板" }),
     ).not.toBeInTheDocument();
@@ -1603,20 +1895,12 @@ describe("application shell", () => {
     ).not.toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "消息" }));
     expect(
-      screen.getByRole("complementary", { name: "消息上下文面板" }),
-    ).toHaveTextContent("暂无消息");
+      screen.queryByRole("complementary", { name: "消息上下文面板" }),
+    ).not.toBeInTheDocument();
     expect(
-      screen
-        .getByRole("complementary", { name: "消息上下文面板" })
-        .querySelector("[data-context-pane-fixed-header]"),
-    ).toHaveClass("h-[50px]");
-    expect(document.getElementById("main-content")).toHaveClass(
-      "p-4",
-      "sm:p-6",
-    );
-    expect(
-      screen.getByRole("heading", { level: 1, name: "消息" }),
+      screen.getByRole("heading", { level: 2, name: "还没有消息" }),
     ).toBeVisible();
+    expect(screen.queryByText("启动恢复需要确认")).not.toBeInTheDocument();
 
     expect(api.navigate).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "音频" }));
@@ -1652,8 +1936,11 @@ describe("application shell", () => {
 
     await user.click(await screen.findByRole("button", { name: "消息" }));
     expect(
-      screen.getByRole("complementary", { name: "消息上下文面板" }),
-    ).toHaveTextContent("暂无消息");
+      screen.getByRole("heading", { level: 2, name: "还没有消息" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("complementary", { name: "消息上下文面板" }),
+    ).not.toBeInTheDocument();
     expect(api.navigate).not.toHaveBeenCalled();
   });
 
@@ -1674,7 +1961,7 @@ describe("application shell", () => {
     const navigation = await screen.findByRole("navigation", {
       name: "工作站主导航",
     });
-    await user.click(screen.getByRole("link", { name: "云端模型" }));
+    await user.click(screen.getByRole("button", { name: "云端模型" }));
     expect(
       screen.getByRole("complementary", { name: "设置上下文面板" }),
     ).toBeVisible();

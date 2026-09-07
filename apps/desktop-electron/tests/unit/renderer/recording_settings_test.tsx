@@ -77,6 +77,7 @@ describe("recording settings", () => {
     const view = render(<RecordingSettingsFeature api={api} />);
 
     const select = screen.getByRole("combobox", { name: "默认麦克风" });
+    expect(screen.queryByText("录制和测试时优先使用")).not.toBeInTheDocument();
     expect(select).toBeDisabled();
     expect(select).toHaveTextContent("会议麦克风");
     expect(api.preflightCapture).toHaveBeenCalledWith({
@@ -88,6 +89,14 @@ describe("recording settings", () => {
     await waitFor(() => expect(select).toBeEnabled());
     expect(select).toHaveTextContent("会议麦克风");
     await user.click(select);
+    expect(
+      document.querySelector('[data-slot="select-content"]'),
+    ).toHaveAttribute("data-align", "end");
+    expect(
+      document.querySelector(
+        '[data-slot="select-content"] [data-position="popper"]',
+      ),
+    ).toHaveAttribute("data-position", "popper");
     expect(screen.getByRole("option", { name: "跟随系统默认" })).toBeVisible();
     await user.click(screen.getByRole("option", { name: "USB 麦克风" }));
 
@@ -159,10 +168,23 @@ describe("recording settings", () => {
     render(<RecordingSettingsFeature api={api} />);
     const user = userEvent.setup();
 
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "测试麦克风" })).toBeEnabled(),
+    const testButton = screen.getByRole("button", { name: "测试麦克风" });
+    const microphoneSelect = screen.getByRole("combobox", {
+      name: "默认麦克风",
+    });
+    await waitFor(() => expect(testButton).toBeEnabled());
+    expect(testButton).toHaveAttribute("data-size", "icon-sm");
+    expect(testButton.querySelector("svg")).toHaveClass("lucide-speech");
+    expect(testButton).not.toHaveTextContent("测试麦克风");
+    expect(testButton.parentElement).toBe(microphoneSelect.parentElement);
+    expect(testButton.compareDocumentPosition(microphoneSelect)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    await user.click(screen.getByRole("button", { name: "测试麦克风" }));
+    await user.hover(testButton);
+    expect(
+      await screen.findByRole("tooltip", { name: "测试麦克风" }),
+    ).toBeVisible();
+    await user.click(testButton);
     const dialog = await screen.findByRole("dialog", { name: "测试麦克风" });
     expect(within(dialog).getByRole("meter")).toHaveAttribute(
       "aria-valuenow",

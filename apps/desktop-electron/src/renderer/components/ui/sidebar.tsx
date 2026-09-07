@@ -163,6 +163,7 @@ function Sidebar({
   collapsible = "offcanvas",
   mobileMode = "sheet",
   overlayContent = false,
+  suppressTransitionKey,
   className,
   children,
   ...props
@@ -172,8 +173,29 @@ function Sidebar({
   collapsible?: "offcanvas" | "icon" | "none";
   mobileMode?: "sheet" | "inline";
   overlayContent?: boolean;
+  suppressTransitionKey?: React.Key;
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
+  const gapRef = React.useRef<HTMLDivElement>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const previousSuppressionKeyRef = React.useRef(suppressTransitionKey);
+
+  React.useLayoutEffect(() => {
+    if (Object.is(previousSuppressionKeyRef.current, suppressTransitionKey))
+      return;
+    previousSuppressionKeyRef.current = suppressTransitionKey;
+    const targets = [gapRef.current, containerRef.current].filter(
+      (target): target is HTMLDivElement => target !== null,
+    );
+    const previousTransitions = targets.map(
+      (target) => target.style.transition,
+    );
+    for (const target of targets) target.style.transition = "none";
+    void gapRef.current?.offsetWidth;
+    targets.forEach((target, index) => {
+      target.style.transition = previousTransitions[index] ?? "";
+    });
+  }, [suppressTransitionKey]);
 
   if (collapsible === "none") {
     return (
@@ -229,6 +251,7 @@ function Sidebar({
     >
       {/* This is what handles the sidebar gap on desktop */}
       <div
+        ref={gapRef}
         data-slot="sidebar-gap"
         className={cn(
           "relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear",
@@ -242,6 +265,7 @@ function Sidebar({
         )}
       />
       <div
+        ref={containerRef}
         data-slot="sidebar-container"
         className={cn(
           "fixed inset-y-0 z-10 h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear",

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
@@ -146,20 +146,9 @@ export function AppShellFrame({
             >
               <ArrowLeft aria-hidden="true" />
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="size-7"
-              aria-label="前进"
-              disabled={!history.canGoForward}
-              onClick={history.onForward}
-            >
-              <ArrowRight aria-hidden="true" />
-            </Button>
             <Separator
               orientation="vertical"
-              className="data-[orientation=vertical]:h-5"
+              className="mx-2 data-[orientation=vertical]:h-5"
             />
             <h1
               ref={titleRef}

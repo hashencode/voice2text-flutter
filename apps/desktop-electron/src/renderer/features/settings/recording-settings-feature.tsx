@@ -1,20 +1,25 @@
 import * as React from "react";
+import { Speech } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldContent,
-  FieldDescription,
   FieldError,
   FieldLabel,
 } from "@/components/ui/field";
 import {
   Select,
-  SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { FloatingCapturePreferenceSetting } from "@/features/capture/capture-workspace";
 import {
   MicrophoneTestDialog,
@@ -24,7 +29,10 @@ import {
   SYSTEM_DEFAULT_MICROPHONE,
   useRecordingPreference,
 } from "@/features/capture/use-recording-preference";
-import { SettingsListBlock } from "@/features/settings/settings-page-section";
+import {
+  SettingsListBlock,
+  SettingsSelectContent,
+} from "@/features/settings/settings-page-section";
 import type { CapturePreflight, Voice2TextDesktopApi } from "@shared/contracts";
 
 export function RecordingSettingsFeature({
@@ -102,7 +110,6 @@ export function RecordingSettingsFeature({
         <Field orientation="horizontal" className="items-center! p-4">
           <FieldContent>
             <FieldLabel id="default-microphone-label">默认麦克风</FieldLabel>
-            <FieldDescription>录制和测试时优先使用</FieldDescription>
             {deviceError ? (
               <div className="flex flex-wrap items-center gap-2">
                 <FieldError>无法读取麦克风，请重试。</FieldError>
@@ -123,48 +130,54 @@ export function RecordingSettingsFeature({
               <FieldError>无法保存默认麦克风，请重试。</FieldError>
             ) : null}
           </FieldContent>
-          <Select
-            value={preference.microphoneDeviceId}
-            disabled={loading || deviceError}
-            onValueChange={(value) => {
-              const device = preflight?.microphones.find(
-                (candidate) => candidate.id === value,
-              );
-              preference.setMicrophone(value, device?.name ?? null);
-            }}
-          >
-            <SelectTrigger
-              aria-labelledby="default-microphone-label"
-              className="max-w-56"
+          <div className="flex shrink-0 items-center gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    aria-label="测试麦克风"
+                    disabled={
+                      microphoneTest.busy || microphoneTest.teardownPending
+                    }
+                    onClick={() => void microphoneTest.start()}
+                  >
+                    <Speech aria-hidden="true" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">测试麦克风</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <Select
+              value={preference.microphoneDeviceId}
+              disabled={loading || deviceError}
+              onValueChange={(value) => {
+                const device = preflight?.microphones.find(
+                  (candidate) => candidate.id === value,
+                );
+                preference.setMicrophone(value, device?.name ?? null);
+              }}
             >
-              <SelectValue>{savedMicrophoneLabel}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={SYSTEM_DEFAULT_MICROPHONE}>
-                跟随系统默认
-              </SelectItem>
-              {preflight?.microphones.map((device) => (
-                <SelectItem key={device.id} value={device.id}>
-                  {device.name}
+              <SelectTrigger
+                aria-labelledby="default-microphone-label"
+                className="max-w-56"
+              >
+                <SelectValue>{savedMicrophoneLabel}</SelectValue>
+              </SelectTrigger>
+              <SettingsSelectContent>
+                <SelectItem value={SYSTEM_DEFAULT_MICROPHONE}>
+                  跟随系统默认
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field orientation="horizontal" className="items-center! border-t p-4">
-          <FieldContent>
-            <FieldLabel>测试麦克风</FieldLabel>
-            <FieldDescription>确认输入音量是否正常</FieldDescription>
-          </FieldContent>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={microphoneTest.busy || microphoneTest.teardownPending}
-            onClick={() => void microphoneTest.start()}
-          >
-            测试麦克风
-          </Button>
+                {preflight?.microphones.map((device) => (
+                  <SelectItem key={device.id} value={device.id}>
+                    {device.name}
+                  </SelectItem>
+                ))}
+              </SettingsSelectContent>
+            </Select>
+          </div>
         </Field>
         <FloatingCapturePreferenceSetting api={api} className="border-t p-4" />
       </SettingsListBlock>

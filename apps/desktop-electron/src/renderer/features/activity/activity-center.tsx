@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/ui/empty-state";
+import { EmptyState, FullScreenEmptyState } from "@/components/ui/empty-state";
 import {
   Item,
   ItemActions,
@@ -256,7 +256,12 @@ export function ActivityMainWorkspace({
   onOpenDetails: (item: ActivityItemView) => void;
 }) {
   if (!item) {
-    return <EmptyState title="请选择消息" className="min-h-0 flex-1" />;
+    return (
+      <FullScreenEmptyState
+        title="还没有消息"
+        description="当有录音完成或需要处理时，相关消息会显示在这里。"
+      />
+    );
   }
   return (
     <section aria-label="消息详情" className="mx-auto max-w-2xl py-8">

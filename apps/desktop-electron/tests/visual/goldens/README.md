@@ -1,14 +1,13 @@
 # Renderer visual baseline authority
 
-The audio first-use top bar is now intentionally omitted. The two
-`audio-empty-recording-ready*.png` baselines still show the previous header and
-require an authorized visual review and refresh; they do not validate this change.
+The audio first-use top bar is intentionally omitted. The two
+`audio-empty-recording-ready*.png` baselines record that full-page presentation.
 
-The product shell now defaults its context pane to 300px and supports runtime
+The product shell defaults its context pane to 300px and supports runtime
 resizing from 240px through 480px while retaining at least 480px for main
-content. The width-sensitive product PNGs below predate that contract and are
-pending an authorized visual review and refresh. Until then they do not validate
-the 300px default, drag behavior, viewport clamping, or shared runtime width.
+content. The width-sensitive product PNGs below record the 300px default; the
+behavioral visual test separately covers drag, viewport clamping, four-section
+sharing, collapse-control isolation, and reload reset.
 
 These images are canonical only for the following rendering contract:
 
@@ -19,12 +18,11 @@ These images are canonical only for the following rendering contract:
 - `zh-CN`, light color scheme, reduced motion, fixed fixture time `2026-08-19T03:20:00.000Z`
 - target shell font stack `"Inter Variable", Inter, "PingFang SC", -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif` (self-hosted Inter; the floating Renderer imports the shared stylesheet and inherits this font)
 
-These ten baselines were inspected and refreshed during the previous authorized
-visual acceptance on 2026-09-03. That historical no-update run passed all eleven
-tests, including hover, selected, keyboard-focus and disabled-state assertions;
-it is not evidence for the newer pane-width contract. The floating control
-retains its layout and behavior; its small timer-glyph delta reflects the shared
-font change.
+These ten baselines were inspected during authorized visual acceptance on
+2026-09-04. Nine width- or full-page-sensitive images were refreshed; the
+floating control remained unchanged. The final no-update run passed all twelve
+tests, including the runtime resize contract, hover, selected, keyboard-focus,
+disabled-state, and reference-integrity assertions.
 
 The shell baselines are:
 

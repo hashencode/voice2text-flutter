@@ -109,7 +109,7 @@ test.describe("sidebar-09 production Renderer", () => {
     await withVisualSession("audio-closed", 1280, 720, async ({ page }) => {
       await expect(
         page.getByRole("button", { name: "前进", exact: true }),
-      ).toBeDisabled();
+      ).toHaveCount(0);
       const filters = page.getByRole("group", { name: "音频筛选" });
       const selectedFilter = filters.locator('[aria-pressed="true"]');
       await expect(selectedFilter).toHaveCSS(
@@ -298,7 +298,7 @@ test.describe("sidebar-09 production Renderer", () => {
   });
 
   test("shares runtime pane resizing, preserves requested width through viewport clamps, and resets on reload", async () => {
-    await withVisualSession("audio-closed", 1280, 720, async (session) => {
+    await withVisualSession("pane-resize", 1280, 720, async (session) => {
       const { page } = session;
       await assertDockedGeometry(page, 1280, 720, PRODUCT_CONTEXT_PANE_WIDTH);
 
@@ -553,6 +553,12 @@ async function assertDockedGeometry(
 ) {
   const expandedPrefix =
     PRIMARY_RAIL_WIDTH + contextPaneWidth + CONTEXT_PANE_BORDER_WIDTH;
+  await expect
+    .poll(async () => {
+      const geometry = await shellGeometry(page);
+      return Math.abs(geometry.gap.width - expandedPrefix);
+    })
+    .toBeLessThan(0.5);
   const geometry = await shellGeometry(page);
   expectRect(geometry.wrapper, { x: 0, y: 0, width, height });
   expectHorizontalRect(geometry.gap, { x: 0, width: expandedPrefix });
@@ -690,6 +696,8 @@ async function assertReferenceChrome(
         borderRadius: style.borderRadius,
         paddingLeft: style.paddingLeft,
         gap: style.gap,
+        marginLeft: style.marginLeft,
+        marginRight: style.marginRight,
       };
     };
     return {
@@ -707,7 +715,6 @@ async function assertReferenceChrome(
       ),
       railStroke: rect('[data-slot="sidebar-rail-stroke"]'),
       back: rect('button[aria-label="后退"]'),
-      forward: rect('button[aria-label="前进"]'),
       avatar: rect('[data-shell-profile-placeholder="true"]'),
       topPaneTriggerCount: document.querySelectorAll(
         '[data-slot="sidebar-inset"] > header [aria-label*="上下文面板"]',
@@ -721,6 +728,8 @@ async function assertReferenceChrome(
   expect(geometry.title!.fontSize).toBe("14px");
   expect(geometry.title!.fontWeight).toBe("600");
   expectWithin(geometry.separator!.height, 20);
+  expect(geometry.separator!.marginLeft).toBe("8px");
+  expect(geometry.separator!.marginRight).toBe("8px");
   if (geometry.railStroke) {
     expectWithin(geometry.railStroke.width, 2);
     expectWithin(geometry.railStroke.height, 16);
@@ -729,16 +738,10 @@ async function assertReferenceChrome(
   }
   expectWithin(geometry.back!.width, 28);
   expectWithin(geometry.back!.height, 28);
-  expectWithin(geometry.forward!.width, 28);
-  expectWithin(geometry.forward!.height, 28);
   expectWithin(geometry.avatar!.width, 28);
   expectWithin(geometry.avatar!.height, 28);
   expect(geometry.topPaneTriggerCount).toBe(0);
-  for (const surface of [
-    geometry.contentHead,
-    geometry.back,
-    geometry.forward,
-  ]) {
+  for (const surface of [geometry.contentHead, geometry.back]) {
     expectShadowless(surface!.boxShadow);
   }
   if (paneOpen) {
