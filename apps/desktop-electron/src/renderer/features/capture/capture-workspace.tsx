@@ -1,24 +1,16 @@
 import * as React from "react";
-import {
-  CheckCircle2,
-  CirclePause,
-  Mic,
-  Play,
-  Square,
-  Trash2,
-} from "lucide-react";
+import { CheckCircle2, Mic, Pencil, Trash2 } from "lucide-react";
 
+import { ApplicationBlocker } from "@/components/application-blocker";
 import { Button } from "@/components/ui/button";
 import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Field,
   FieldContent,
@@ -27,22 +19,28 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { CaptionWorkspace } from "@/features/captions/caption-workspace";
 import { userFacingError } from "@/lib/user-facing-error";
 import type {
   ApplicationSnapshot,
   CapturePreflight,
+  CaptureRecoveryItem,
   CaptureSnapshot,
   Voice2TextDesktopApi,
 } from "@shared/contracts";
 import {
   deriveCaptureCompactPresentation,
-  formatCaptureElapsed,
   type CaptureCompactAction,
   type CaptureView,
 } from "./capture-presentation";
+import { CaptureFooter } from "./capture-footer";
 import {
   resolveRecordingMicrophone,
   useRecordingPreference,
@@ -52,16 +50,7 @@ type CaptureControlAction = CaptureCompactAction;
 
 let commandSequence = 0;
 
-export function CaptureWorkspace({
-  capture,
-  recordRequest,
-  detailOpen = true,
-  focusSessionId = null,
-  autoOpenRecoveries = false,
-  onPreflightResolved,
-  onDetailOpenChange,
-  onOpenLocalModels,
-}: {
+type CaptureWorkspaceProps = {
   capture: ApplicationSnapshot["capture"];
   /** @deprecated Capture state is authoritative in Main and arrives via snapshots. */
   applicationRevision?: number;
@@ -72,15 +61,59 @@ export function CaptureWorkspace({
   onPreflightResolved?: (preflight: CapturePreflight) => void;
   onDetailOpenChange?: (open: boolean) => void;
   onOpenLocalModels?: () => void;
+};
+
+export type CaptureWorkspaceProjection = {
+  customTitle: React.ReactNode;
+  content: React.ReactNode;
+  footer: React.ReactNode;
+};
+
+export function CaptureWorkspace(props: CaptureWorkspaceProps) {
+  return (
+    <CaptureWorkspaceController {...props}>
+      {({ customTitle, content, footer }) => (
+        <>
+          {customTitle ? (
+            <div className="mb-4 min-w-0">{customTitle}</div>
+          ) : null}
+          {content}
+          {footer}
+        </>
+      )}
+    </CaptureWorkspaceController>
+  );
+}
+
+export function CaptureWorkspaceController({
+  capture,
+  recordRequest,
+  detailOpen = true,
+  focusSessionId = null,
+  autoOpenRecoveries = false,
+  onPreflightResolved,
+  onDetailOpenChange,
+  onOpenLocalModels,
+  children,
+}: CaptureWorkspaceProps & {
+  children: (projection: CaptureWorkspaceProjection) => React.ReactNode;
 }) {
   const [preflight, setPreflight] = React.useState<CapturePreflight | null>(
     null,
   );
   const [setupOpen, setSetupOpen] = React.useState(false);
-  const [title, setTitle] = React.useState("音频录制");
+  const [title, setTitle] = React.useState("");
+  const [titleLoading, setTitleLoading] = React.useState(false);
+  const [titleEditing, setTitleEditing] = React.useState(false);
+  const [confirmedActiveTitle, setConfirmedActiveTitle] = React.useState("");
+  const [titleDialog, setTitleDialog] = React.useState<
+    | { kind: "load" | "validation"; message: string }
+    | { kind: "save"; message: string; value: string }
+    | null
+  >(null);
   const [captionEnabled, setCaptionEnabled] = React.useState(true);
   const [microphoneDeviceId, setMicrophoneDeviceId] = React.useState("");
-  const [recoveries, setRecoveries] = React.useState<CaptureSnapshot[]>([]);
+  const [recoveries, setRecoveries] = React.useState<CaptureRecoveryItem[]>([]);
   const [loadedRecoveryTarget, setLoadedRecoveryTarget] = React.useState<
     string | null
   >(null);
@@ -99,6 +132,16 @@ export function CaptureWorkspace({
   const terminalActionRef = React.useRef<HTMLButtonElement>(null);
   const focusedTerminalStopSessionRef = React.useRef<string | null>(null);
   const lastRecordRequestRef = React.useRef(recordRequest ?? 0);
+  const titleInputRef = React.useRef<HTMLInputElement>(null);
+  const titleDirtyRef = React.useRef(false);
+  const titleGenerationRef = React.useRef(0);
+  const suggestionGenerationRef = React.useRef(0);
+  const titleSaveRef = React.useRef<Promise<boolean> | null>(null);
+  const titleSaveGenerationRef = React.useRef<number | null>(null);
+  const onDetailOpenChangeRef = React.useRef(onDetailOpenChange);
+  React.useEffect(() => {
+    onDetailOpenChangeRef.current = onDetailOpenChange;
+  }, [onDetailOpenChange]);
   const recoverySessionId =
     capture.phase === "recovery" ? capture.sessionId : null;
   const prioritizedRecoverySessionId = focusSessionId ?? recoverySessionId;
@@ -112,6 +155,7 @@ export function CaptureWorkspace({
       .then((values) => {
         if (!active) return;
         setError(null);
+        setManagementOpen(false);
         setRecoveries(
           prioritizedRecoverySessionId
             ? [...values].sort((left, right) =>
@@ -123,13 +167,6 @@ export function CaptureWorkspace({
               )
             : values,
         );
-        if (
-          autoOpenRecoveries &&
-          values.length > 0 &&
-          !prioritizedRecoverySessionId
-        ) {
-          onDetailOpenChange?.(true);
-        }
         setLoadedRecoveryTarget(loadTarget);
       })
       .catch((reason: unknown) => {
@@ -141,13 +178,153 @@ export function CaptureWorkspace({
     return () => {
       active = false;
     };
-  }, [autoOpenRecoveries, onDetailOpenChange, prioritizedRecoverySessionId]);
+  }, [autoOpenRecoveries, prioritizedRecoverySessionId]);
 
-  const captureCandidate = capture.phase === "idle" ? null : capture;
+  const captureCandidate =
+    capture.phase === "idle" || capture.phase === "recovery" ? null : capture;
   const activeCapture =
     captureCandidate?.sessionId === dismissedSessionId
       ? null
       : captureCandidate;
+  const selectedActiveCapture =
+    !prioritizedRecoverySessionId ||
+    activeCapture?.sessionId === prioritizedRecoverySessionId
+      ? activeCapture
+      : null;
+  const persistedSessionId = selectedActiveCapture?.sessionId ?? null;
+  const activeTitle = selectedActiveCapture?.title ?? "";
+  React.useEffect(() => {
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      if (!persistedSessionId) {
+        setConfirmedActiveTitle("");
+        setTitleEditing(false);
+        return;
+      }
+      setConfirmedActiveTitle(activeTitle);
+      if (!titleDirtyRef.current && !titleSaveRef.current)
+        setTitle(activeTitle);
+    });
+    return () => {
+      active = false;
+    };
+  }, [persistedSessionId, activeTitle]);
+
+  React.useLayoutEffect(() => {
+    if (!titleEditing) return;
+    titleInputRef.current?.focus();
+    titleInputRef.current?.select();
+  }, [titleEditing]);
+
+  const loadSuggestedTitle = React.useCallback(async () => {
+    const generation = ++suggestionGenerationRef.current;
+    titleDirtyRef.current = false;
+    setTitle("");
+    setTitleLoading(true);
+    try {
+      const result = await window.voice2text.suggestCaptureTitle();
+      if (generation !== suggestionGenerationRef.current) return false;
+      if (!titleDirtyRef.current) setTitle(result.title);
+      setTitleLoading(false);
+      return true;
+    } catch (reason: unknown) {
+      if (generation !== suggestionGenerationRef.current) return false;
+      setTitleLoading(false);
+      setSetupOpen(false);
+      onDetailOpenChangeRef.current?.(false);
+      setTitleDialog({
+        kind: "load",
+        message: userFacingError(reason, "无法生成录制名称"),
+      });
+      return false;
+    }
+  }, []);
+
+  const validateTitle = React.useCallback((value: string) => {
+    const trimmed = value.trim();
+    const contentLength = trimmed.startsWith("Recover-")
+      ? trimmed.slice("Recover-".length).length
+      : trimmed.length;
+    if (!trimmed) return { value: null, message: "录制名称不能为空。" };
+    if (contentLength > 50)
+      return { value: null, message: "录制名称最多包含 50 个字符。" };
+    return { value: trimmed, message: null };
+  }, []);
+
+  const commitTitle = React.useCallback(
+    async (override?: string): Promise<boolean> => {
+      if (titleSaveRef.current) return titleSaveRef.current;
+      const candidate = override ?? title;
+      const validation = validateTitle(candidate);
+      if (!validation.value) {
+        setTitleDialog({ kind: "validation", message: validation.message! });
+        return false;
+      }
+      const nextTitle = validation.value;
+      if (!persistedSessionId) {
+        setTitle(nextTitle);
+        setTitleEditing(false);
+        return true;
+      }
+      if (nextTitle === confirmedActiveTitle) {
+        setTitle(nextTitle);
+        titleDirtyRef.current = false;
+        setTitleEditing(false);
+        return true;
+      }
+      const generation = titleGenerationRef.current;
+      const sessionId = persistedSessionId;
+      titleSaveGenerationRef.current = generation;
+      const promise = window.voice2text
+        .renameCaptureSession({ sessionId, title: nextTitle })
+        .then(() => {
+          if (generation === titleGenerationRef.current) {
+            setConfirmedActiveTitle(nextTitle);
+            setTitle(nextTitle);
+            titleDirtyRef.current = false;
+            setTitleEditing(false);
+          }
+          return true;
+        })
+        .catch((reason: unknown) => {
+          if (generation === titleGenerationRef.current) {
+            setTitleDialog({
+              kind: "save",
+              value: nextTitle,
+              message: userFacingError(reason, "录制名称未保存"),
+            });
+          }
+          return false;
+        })
+        .finally(() => {
+          if (titleSaveRef.current === promise) {
+            titleSaveRef.current = null;
+            titleSaveGenerationRef.current = null;
+          }
+        });
+      titleSaveRef.current = promise;
+      return promise;
+    },
+    [confirmedActiveTitle, persistedSessionId, title, validateTitle],
+  );
+
+  const settleTitleBeforeStop = React.useCallback(async () => {
+    const pending = titleSaveRef.current;
+    if (pending) {
+      const pendingGeneration = titleSaveGenerationRef.current;
+      const saved = await pending;
+      if (
+        titleDirtyRef.current &&
+        pendingGeneration !== null &&
+        pendingGeneration !== titleGenerationRef.current
+      ) {
+        return commitTitle();
+      }
+      return saved;
+    }
+    return titleDirtyRef.current ? await commitTitle() : true;
+  }, [commitTitle]);
   const stopConfirmationOpen = Boolean(
     activeCapture &&
     activeCapture.sessionId === stopConfirmationSessionId &&
@@ -211,13 +388,14 @@ export function CaptureWorkspace({
         return;
       }
       setSetupOpen(true);
-      onDetailOpenChange?.(true);
+      onDetailOpenChangeRef.current?.(true);
       setOperationMessage("录制设置已打开");
+      await loadSuggestedTitle();
     });
   }, [
     captionEnabled,
-    onDetailOpenChange,
     onPreflightResolved,
+    loadSuggestedTitle,
     recordingPreference.microphoneDeviceId,
     runExclusive,
   ]);
@@ -251,6 +429,7 @@ export function CaptureWorkspace({
     void runExclusive("start", "正在开始录制", async () => {
       await window.voice2text.startCapture({
         title: title.trim(),
+        refreshSuggestedTitle: !titleDirtyRef.current,
         microphoneDeviceId: microphoneDeviceId || undefined,
         captionEnabled,
         idempotencyKey: commandKey("start"),
@@ -272,7 +451,7 @@ export function CaptureWorkspace({
       const operationLabel = {
         pause: "正在暂停录制",
         resume: "正在继续录制",
-        stop: "正在安全结束录制",
+        stop: "正在停止并保存",
       }[action];
       void runExclusive(
         `control-${activeCapture.sessionId}`,
@@ -303,41 +482,68 @@ export function CaptureWorkspace({
   const requestControl = React.useCallback(
     (action: CaptureControlAction) => {
       if (action === "stop") {
-        if (
-          activeCapture &&
-          activeCapture.sessionId !== successfulTerminalStopSessionId
-        ) {
-          setStopConfirmationSessionId(activeCapture.sessionId);
+        if (!titleDirtyRef.current) {
+          if (
+            activeCapture &&
+            activeCapture.sessionId !== successfulTerminalStopSessionId
+          ) {
+            setStopConfirmationSessionId(activeCapture.sessionId);
+          }
+          return;
         }
+        void settleTitleBeforeStop().then((settled) => {
+          if (
+            settled &&
+            activeCapture &&
+            activeCapture.sessionId !== successfulTerminalStopSessionId
+          ) {
+            setStopConfirmationSessionId(activeCapture.sessionId);
+          }
+        });
         return;
       }
       control(action);
     },
-    [activeCapture, control, successfulTerminalStopSessionId],
+    [
+      activeCapture,
+      control,
+      settleTitleBeforeStop,
+      successfulTerminalStopSessionId,
+    ],
   );
 
   const confirmStop = React.useCallback(() => {
     control("stop");
   }, [control]);
 
-  const recover = React.useCallback(
-    (item: CaptureSnapshot, action: "keep" | "discard") => {
+  const recoverAll = React.useCallback(
+    (items: CaptureRecoveryItem[], action: "keep" | "discard") => {
       void runExclusive(
-        `recovery-${item.sessionId}`,
-        action === "keep" ? "正在保留恢复录制" : "正在丢弃恢复录制",
+        "recovery-all",
+        action === "keep" ? "正在恢复所有录音" : "正在丢弃所有恢复录音",
         async () => {
-          await window.voice2text.actOnCaptureRecovery({
-            action,
-            sessionId: item.sessionId,
-            idempotencyKey: commandKey(action),
-          });
-          setRecoveries((current) =>
-            current.filter(
-              (candidate) => candidate.sessionId !== item.sessionId,
-            ),
-          );
+          const completedSessionIds = new Set<string>();
+          try {
+            for (const item of items) {
+              await window.voice2text.actOnCaptureRecovery({
+                action,
+                sessionId: item.sessionId,
+                idempotencyKey: commandKey(action),
+              });
+              completedSessionIds.add(item.sessionId);
+            }
+          } finally {
+            if (completedSessionIds.size > 0) {
+              setRecoveries((current) =>
+                current.filter(
+                  (candidate) => !completedSessionIds.has(candidate.sessionId),
+                ),
+              );
+            }
+          }
+          setManagementOpen(false);
           setOperationMessage(
-            action === "keep" ? "恢复录制已保留" : "恢复录制已丢弃",
+            action === "keep" ? "所有录音已恢复" : "所有恢复录音已丢弃",
           );
         },
       );
@@ -367,87 +573,259 @@ export function CaptureWorkspace({
     loadedRecoveryTarget === focusSessionId &&
     focusedRecoveries.length === 0 &&
     !focusedActiveCapture;
-  if (
+  const workspaceHidden =
     recordRequest !== undefined &&
     !activeCapture &&
     !setupOpen &&
     recoveries.length === 0 &&
-    !focusSessionId
-  ) {
-    return null;
-  }
+    !focusSessionId;
+  const recoveryDialogOpen =
+    recoveries.length > 0 &&
+    (detailOpen || autoOpenRecoveries || Boolean(focusSessionId));
 
-  const detail = detailOpen ? (
-    <section
-      role="region"
-      aria-label="录制详情"
-      aria-busy={busy}
-      className="mx-auto w-full max-w-3xl space-y-5"
-    >
-      {busy ? (
-        <p className="mb-3 border-b bg-muted/40 pb-3 text-sm font-medium">
-          {operationMessage}
-        </p>
-      ) : null}
-      {error ? (
-        <div
-          role="alert"
-          className="mb-3 border-y border-destructive/40 bg-destructive/5 py-3 text-sm"
-        >
-          {error}
-        </div>
-      ) : null}
-
-      {focusedRecoveries.length > 0 ? (
-        <RecoverySurface
-          items={focusedRecoveries}
-          busy={busy}
-          managementOpen={managementOpen}
-          onManage={() => setManagementOpen(true)}
-          onAction={recover}
-        />
-      ) : null}
-
-      {focusedCaptureUnavailable ? (
-        <section role="status" className="border-y py-6 text-sm">
-          <p className="font-medium">这条录制已不在待恢复列表中</p>
-          <p className="mt-1 text-muted-foreground">
-            消息记录仍会保留，但不会用当前录制替代它。
+  const detail =
+    detailOpen && !workspaceHidden && !recoveryDialogOpen ? (
+      <section
+        role="region"
+        aria-label="录制详情"
+        aria-busy={busy}
+        className="mx-auto w-full max-w-3xl space-y-5"
+      >
+        {busy && !focusedActiveCapture ? (
+          <p className="mb-3 border-b bg-muted/40 pb-3 text-sm font-medium">
+            {operationMessage}
           </p>
-        </section>
-      ) : focusedActiveCapture ? (
-        <ActiveCapture
-          capture={focusedActiveCapture}
-          busy={busy}
-          pendingAction={pendingAction}
-          stopConfirmationOpen={stopConfirmationOpen}
-          stopSubmitted={
-            focusedActiveCapture.sessionId === successfulTerminalStopSessionId
-          }
-          terminalActionRef={terminalActionRef}
-          onCancelStop={() => setStopConfirmationSessionId(null)}
-          onConfirmStop={confirmStop}
-          onControl={requestControl}
-          onBeginAnother={beginAnotherCapture}
-        />
-      ) : !focusSessionId ? (
-        <CaptureSetup
-          setupOpen={setupOpen}
-          preflight={preflight}
-          title={title}
-          busy={busy}
-          onCheck={checkPreflight}
-          onStart={start}
-          onTitleChange={setTitle}
-          captionAvailable={preflight?.captionModelAvailable ?? true}
-          captionEnabled={captionEnabled}
-          onOpenLocalModels={onOpenLocalModels}
-        />
-      ) : null}
-    </section>
-  ) : null;
+        ) : null}
+        {error ? (
+          <div
+            role="alert"
+            className="mb-3 border-y border-destructive/40 bg-destructive/5 py-3 text-sm"
+          >
+            {error}
+          </div>
+        ) : null}
 
-  return detail;
+        {focusedCaptureUnavailable ? (
+          <section role="status" className="border-y py-6 text-sm">
+            <p className="font-medium">这条录制已不在待恢复列表中</p>
+            <p className="mt-1 text-muted-foreground">
+              消息记录仍会保留，但不会用当前录制替代它。
+            </p>
+          </section>
+        ) : focusedActiveCapture ? (
+          <ActiveCapture
+            capture={focusedActiveCapture}
+            busy={busy}
+            terminalActionRef={terminalActionRef}
+            onBeginAnother={beginAnotherCapture}
+          />
+        ) : !focusSessionId ? (
+          <CaptureSetup
+            setupOpen={setupOpen}
+            preflight={preflight}
+            busy={busy}
+            onCheck={checkPreflight}
+            onStart={start}
+            titleReady={!titleLoading && Boolean(title)}
+            captionAvailable={preflight?.captionModelAvailable ?? true}
+            captionEnabled={captionEnabled}
+            onOpenLocalModels={onOpenLocalModels}
+          />
+        ) : null}
+      </section>
+    ) : null;
+
+  const titleEditable = selectedActiveCapture
+    ? isCaptureTitleEditable(selectedActiveCapture)
+    : setupOpen;
+  const customTitle =
+    detailOpen && (title || titleEditing) && !titleLoading ? (
+      <CaptureTitleEditor
+        value={title}
+        editing={titleEditing}
+        editable={titleEditable}
+        onEdit={() => setTitleEditing(true)}
+        inputRef={titleInputRef}
+        onChange={(value) => {
+          titleGenerationRef.current += 1;
+          titleDirtyRef.current = true;
+          setTitle(value);
+        }}
+        onBlur={() => void commitTitle()}
+      />
+    ) : null;
+  const dialogs = (
+    <>
+      <RecoveryDialog
+        open={recoveryDialogOpen}
+        itemCount={recoveries.length}
+        busy={busy}
+        error={error}
+        operationMessage={operationMessage}
+        discardActionVisible={managementOpen}
+        onRevealDiscard={() => setManagementOpen(true)}
+        onRestoreAll={() => recoverAll(recoveries, "keep")}
+        onDiscardAll={() => recoverAll(recoveries, "discard")}
+      />
+      <TitleErrorDialog
+        state={titleDialog}
+        onClose={() => setTitleDialog(null)}
+        onRetry={(value) => {
+          setTitleDialog(null);
+          void commitTitle(value);
+        }}
+      />
+    </>
+  );
+  const footerCapture: CaptureView | null = focusedActiveCapture;
+  const footer =
+    detailOpen && footerCapture ? (
+      <CaptureFooter
+        capture={footerCapture}
+        busy={busy}
+        stopConfirmationOpen={stopConfirmationOpen}
+        stopSubmitted={
+          footerCapture.sessionId === successfulTerminalStopSessionId
+        }
+        statusOverride={
+          footerCapture.phase !== "finalizing" &&
+          pendingAction?.startsWith("control-")
+            ? operationMessage
+            : undefined
+        }
+        onCancelStop={() => setStopConfirmationSessionId(null)}
+        onConfirmStop={confirmStop}
+        onControl={requestControl}
+      />
+    ) : null;
+
+  return children({
+    customTitle,
+    content: (
+      <>
+        {detail}
+        {dialogs}
+      </>
+    ),
+    footer,
+  });
+}
+
+function CaptureTitleEditor({
+  value,
+  editing,
+  editable,
+  inputRef,
+  onEdit,
+  onChange,
+  onBlur,
+}: {
+  value: string;
+  editing: boolean;
+  editable: boolean;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  onEdit: () => void;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+}) {
+  if (editing && editable) {
+    return (
+      <div className="flex min-w-0 items-center">
+        <Input
+          ref={inputRef}
+          aria-label="录制名称"
+          className="min-w-[180px] w-auto [field-sizing:content]"
+          value={value}
+          maxLength={value.startsWith("Recover-") ? 58 : 50}
+          onChange={(event) => onChange(event.currentTarget.value)}
+          onBlur={onBlur}
+        />
+      </div>
+    );
+  }
+  if (!editable) {
+    return (
+      <h1 className="min-w-0 truncate text-sm leading-snug font-semibold">
+        {value}
+      </h1>
+    );
+  }
+  return (
+    <TooltipProvider>
+      <div className="flex min-w-0 items-center gap-1">
+        <button
+          type="button"
+          className="min-w-0 truncate text-left text-sm leading-snug font-semibold"
+          onClick={onEdit}
+        >
+          {value}
+        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="size-7 shrink-0"
+              aria-label="编辑录制名称"
+              onClick={onEdit}
+            >
+              <Pencil aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>编辑录制名称</TooltipContent>
+        </Tooltip>
+      </div>
+    </TooltipProvider>
+  );
+}
+
+function TitleErrorDialog({
+  state,
+  onClose,
+  onRetry,
+}: {
+  state:
+    | { kind: "load" | "validation"; message: string }
+    | { kind: "save"; message: string; value: string }
+    | null;
+  onClose: () => void;
+  onRetry: (value: string) => void;
+}) {
+  return (
+    <Dialog open={state !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>
+            {state?.kind === "load"
+              ? "无法准备录制名称"
+              : state?.kind === "save"
+                ? "录制名称未保存"
+                : "请检查录制名称"}
+          </DialogTitle>
+          <DialogDescription>{state?.message ?? ""}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            {state?.kind === "save" ? "取消" : "关闭"}
+          </Button>
+          {state?.kind === "save" ? (
+            <Button type="button" onClick={() => onRetry(state.value)}>
+              重试
+            </Button>
+          ) : null}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function isCaptureTitleEditable(capture: CaptureView): boolean {
+  if (["finalizing", "completed", "failed"].includes(capture.phase)) {
+    return false;
+  }
+  if (capture.phase !== "partial_capture") return true;
+  return Boolean(capture.systemAudioHealthy || capture.microphoneHealthy);
 }
 
 export function FloatingCapturePreferenceSetting({
@@ -513,22 +891,20 @@ export function FloatingCapturePreferenceSetting({
 function CaptureSetup({
   setupOpen,
   preflight,
-  title,
   busy,
   onCheck,
   onStart,
-  onTitleChange,
+  titleReady,
   captionAvailable,
   captionEnabled,
   onOpenLocalModels,
 }: {
   setupOpen: boolean;
   preflight: CapturePreflight | null;
-  title: string;
   busy: boolean;
   onCheck: () => void;
   onStart: () => void;
-  onTitleChange: (value: string) => void;
+  titleReady: boolean;
   captionAvailable: boolean;
   captionEnabled: boolean;
   onOpenLocalModels?: () => void;
@@ -541,9 +917,6 @@ function CaptureSetup({
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="font-semibold">音频录制</h2>
-          <p className="text-sm text-muted-foreground">
-            跨页面持续运行，由本机安全保存。
-          </p>
         </div>
         <Button type="button" size="sm" disabled={busy} onClick={onCheck}>
           检查并设置录制
@@ -558,16 +931,6 @@ function CaptureSetup({
       <h2 id="capture-setup-heading" className="font-semibold">
         设置音频录制
       </h2>
-      <div className="space-y-1.5">
-        <Label htmlFor="capture-title">录制名称</Label>
-        <Input
-          id="capture-title"
-          value={title}
-          maxLength={256}
-          disabled={busy}
-          onChange={(event) => onTitleChange(event.currentTarget.value)}
-        />
-      </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p role="status" className="text-sm text-muted-foreground">
           {captionEnabled && captionAvailable
@@ -581,12 +944,8 @@ function CaptureSetup({
         ) : null}
       </div>
       <div className="flex flex-wrap justify-end gap-2">
-        {readyToStart ? (
-          <Button
-            type="button"
-            disabled={busy || !title.trim()}
-            onClick={onStart}
-          >
+        {readyToStart && titleReady ? (
+          <Button type="button" disabled={busy} onClick={onStart}>
             <Mic aria-hidden="true" />
             {busy ? "正在开始…" : "开始录制"}
           </Button>
@@ -599,134 +958,28 @@ function CaptureSetup({
 function ActiveCapture({
   capture,
   busy,
-  pendingAction,
-  stopConfirmationOpen,
-  stopSubmitted,
   terminalActionRef,
-  onCancelStop,
-  onConfirmStop,
-  onControl,
   onBeginAnother,
 }: {
   capture: CaptureView;
   busy: boolean;
-  pendingAction: string | null;
-  stopConfirmationOpen: boolean;
-  stopSubmitted: boolean;
   terminalActionRef: React.RefObject<HTMLButtonElement | null>;
-  onCancelStop: () => void;
-  onConfirmStop: () => void;
-  onControl: (action: CaptureControlAction) => void;
   onBeginAnother: () => void;
 }) {
   const presentation = deriveCaptureCompactPresentation(capture);
-  const paused = presentation?.action === "resume";
-  const wakeRequiresResume =
-    paused && capture.interruptionReason === "system_wake_requires_resume";
   const running = presentation?.action === "pause";
   const finalizedPartial = capture.phase === "partial_capture" && !running;
-  const label = finalizedPartial
-    ? "部分录制已安全保存"
-    : capturePhaseLabel(capture.phase, capture.interruptionReason);
   return (
     <section aria-label="当前录制" className="space-y-3">
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-          {paused ? (
-            <CirclePause className="size-5" aria-hidden="true" />
-          ) : (
-            <Mic className="size-5" aria-hidden="true" />
-          )}
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium text-muted-foreground">{label}</p>
-          <h2 className="truncate font-semibold">{capture.title}</h2>
-          <p className="mt-1 text-sm tabular-nums text-muted-foreground">
-            {formatCaptureElapsed(capture.elapsedMs)} · 切换页面不会停止此会话
-          </p>
-          {capture.message ? (
-            <p className="mt-2 text-sm">{capture.message}</p>
-          ) : null}
-        </div>
-      </div>
+      {capture.message ? <p className="text-sm">{capture.message}</p> : null}
       {capture.phase === "partial_capture" || capture.partialCapture ? (
         <PartialCaptureStatus capture={capture} />
       ) : null}
       <ActiveCaptionWorkspace sessionId={capture.sessionId} />
-      {pendingAction?.startsWith("control-") ? (
-        <p className="text-sm font-medium">
-          {capture.phase === "finalizing" ? "正在安全结束录制" : "操作处理中…"}
-        </p>
-      ) : null}
-      {presentation?.canStop ? (
-        <div className="flex flex-wrap justify-end gap-2">
-          {running ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              onClick={() => onControl("pause")}
-            >
-              <CirclePause aria-hidden="true" />
-              暂停录制
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              disabled={busy}
-              onClick={() => onControl("resume")}
-            >
-              <Play aria-hidden="true" />
-              {wakeRequiresResume ? "确认并继续录制" : "继续录制"}
-            </Button>
-          )}
-          <AlertDialog
-            open={stopConfirmationOpen}
-            onOpenChange={(open) => {
-              if (busy || stopSubmitted) return;
-              if (open) onControl("stop");
-              else onCancelStop();
-            }}
-          >
-            <AlertDialogTrigger asChild>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={busy || stopSubmitted}
-              >
-                <Square aria-hidden="true" />
-                停止并保存
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>确认停止并保存</AlertDialogTitle>
-                <AlertDialogDescription className="sr-only">
-                  确认停止录制
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel asChild>
-                  <Button type="button" variant="outline" disabled={busy}>
-                    取消
-                  </Button>
-                </AlertDialogCancel>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  disabled={busy}
-                  onClick={onConfirmStop}
-                >
-                  <Square aria-hidden="true" />
-                  {busy ? "正在保存…" : "确认停止并保存"}
-                </Button>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      ) : capture.phase === "completed" ||
+      {!presentation?.canStop &&
+      (capture.phase === "completed" ||
         capture.phase === "failed" ||
-        finalizedPartial ? (
+        finalizedPartial) ? (
         <div className="flex justify-end">
           <Button
             ref={terminalActionRef}
@@ -802,75 +1055,75 @@ function PartialCaptureStatus({ capture }: { capture: CaptureView }) {
   );
 }
 
-function RecoverySurface({
-  items,
+function RecoveryDialog({
+  open,
+  itemCount,
   busy,
-  managementOpen,
-  onManage,
-  onAction,
+  error,
+  operationMessage,
+  discardActionVisible,
+  onRevealDiscard,
+  onRestoreAll,
+  onDiscardAll,
 }: {
-  items: CaptureSnapshot[];
+  open: boolean;
+  itemCount: number;
   busy: boolean;
-  managementOpen: boolean;
-  onManage: () => void;
-  onAction: (item: CaptureSnapshot, action: "keep" | "discard") => void;
+  error: string | null;
+  operationMessage: string;
+  discardActionVisible: boolean;
+  onRevealDiscard: () => void;
+  onRestoreAll: () => void;
+  onDiscardAll: () => void;
 }) {
   return (
-    <section
-      aria-labelledby="capture-recovery-heading"
-      className="mb-4 space-y-3 border-b pb-4"
+    <ApplicationBlocker
+      open={open}
+      title="发现可恢复录制"
+      description={`发现 ${itemCount} 段未完成的录音，可一次恢复并保存。`}
     >
-      <div>
-        <p className="text-xs font-medium text-amber-700">需要你确认</p>
-        <h2 id="capture-recovery-heading" className="font-semibold">
-          发现可恢复录制
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          应用关闭或重新载入不会删除已保存的录音。
-        </p>
+      <div className="space-y-2">
+        {busy ? (
+          <p className="border-y bg-muted/40 py-3 text-sm font-medium">
+            {operationMessage}
+          </p>
+        ) : null}
+        {error ? (
+          <p
+            role="alert"
+            className="border-y border-destructive/40 bg-destructive/5 py-3 text-sm"
+          >
+            {error}
+          </p>
+        ) : null}
       </div>
-      <div className="divide-y border-y">
-        {items.map((item) => (
-          <div key={item.sessionId} className="py-3 text-sm">
-            <p className="font-medium">中断的音频录制</p>
-            <p className="mt-1 text-muted-foreground">
-              {formatCaptureElapsed(item.captureTimelineMs)} · {item.gapCount}{" "}
-              个时间缺口
-            </p>
-            <div className="mt-3 flex flex-wrap justify-end gap-2">
-              {!managementOpen ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={onManage}
-                >
-                  管理恢复录制
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="destructive"
-                  disabled={busy}
-                  onClick={() => onAction(item, "discard")}
-                >
-                  <Trash2 aria-hidden="true" />
-                  丢弃这段恢复录制
-                </Button>
-              )}
-              <Button
-                type="button"
-                disabled={busy}
-                onClick={() => onAction(item, "keep")}
-              >
-                <CheckCircle2 aria-hidden="true" />
-                保留并完成恢复
-              </Button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
+      <DialogFooter>
+        {discardActionVisible ? (
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={busy}
+            onClick={onDiscardAll}
+          >
+            <Trash2 aria-hidden="true" />
+            丢弃所有恢复录音
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={onRevealDiscard}
+          >
+            管理恢复录制
+          </Button>
+        )}
+        <Button type="button" disabled={busy} onClick={onRestoreAll}>
+          <CheckCircle2 aria-hidden="true" />
+          {busy ? "正在恢复…" : "恢复所有录音"}
+        </Button>
+      </DialogFooter>
+    </ApplicationBlocker>
   );
 }
 

@@ -5,6 +5,7 @@ import { createInterface, type Interface } from "node:readline";
 
 import {
   capturePreflightSchema,
+  captureRuntimeSnapshotSchema,
   captureSnapshotSchema,
   microphoneTestSnapshotSchema,
   secureImportReceiptSchema,
@@ -12,6 +13,7 @@ import {
   type SecureImportReceipt,
   type SecureImportRequest,
   type CapturePreflight,
+  type CaptureRuntimeSnapshot,
   type CaptureSnapshot,
   type CaptureStartCommand,
   type CaptureControlCommand,
@@ -208,7 +210,9 @@ export class MacOSNativeHelperSession {
     return capturePreflightSchema.parse(response.capture);
   }
 
-  async captureStart(command: CaptureStartCommand): Promise<CaptureSnapshot> {
+  async captureStart(
+    command: CaptureStartCommand,
+  ): Promise<CaptureRuntimeSnapshot> {
     const response = await this.invoke({
       command: "capture-start",
       commandId: command.idempotencyKey,
@@ -218,39 +222,39 @@ export class MacOSNativeHelperSession {
         microphoneDeviceId: command.microphoneDeviceId,
       },
     });
-    return captureSnapshotSchema.parse(response.capture);
+    return parseCaptureRuntimeSnapshot(response.capture);
   }
 
   async captureControl(
     command: CaptureControlCommand,
-  ): Promise<CaptureSnapshot> {
+  ): Promise<CaptureRuntimeSnapshot> {
     const response = await this.invoke({
       command: `capture-${command.action}`,
       commandId: command.idempotencyKey,
       request: { sessionId: command.sessionId },
     });
-    return captureSnapshotSchema.parse(response.capture);
+    return parseCaptureRuntimeSnapshot(response.capture);
   }
 
   async captureLifecycle(
     action: "system-sleep" | "system-wake",
     sessionId: string,
     commandId: string,
-  ): Promise<CaptureSnapshot> {
+  ): Promise<CaptureRuntimeSnapshot> {
     const response = await this.invoke({
       command: `capture-${action}`,
       commandId,
       request: { sessionId },
     });
-    return captureSnapshotSchema.parse(response.capture);
+    return parseCaptureRuntimeSnapshot(response.capture);
   }
 
-  async captureSnapshot(sessionId: string): Promise<CaptureSnapshot> {
+  async captureSnapshot(sessionId: string): Promise<CaptureRuntimeSnapshot> {
     const response = await this.invoke({
       command: "capture-snapshot",
       request: { sessionId },
     });
-    return captureSnapshotSchema.parse(response.capture);
+    return parseCaptureRuntimeSnapshot(response.capture);
   }
 
   async captureRecover(): Promise<CaptureSnapshot[]> {
@@ -375,6 +379,12 @@ export class MacOSNativeHelperSession {
     );
     return await next;
   }
+}
+
+export function parseCaptureRuntimeSnapshot(
+  value: unknown,
+): CaptureRuntimeSnapshot {
+  return captureRuntimeSnapshotSchema.parse(value);
 }
 
 class HelperLineProtocol {

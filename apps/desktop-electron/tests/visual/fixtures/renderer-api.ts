@@ -4,7 +4,7 @@ import type {
   AudioSummary,
   AudioWorkspaceSnapshot,
   CapturePreflight,
-  CaptureSnapshot,
+  CaptureRecoveryItem,
   CompanionSnapshot,
 } from "../../../src/shared/contracts";
 
@@ -23,7 +23,7 @@ export interface VisualRendererFixture {
   audios: AudioSummary[];
   audioWorkspaces: AudioWorkspaceSnapshot[];
   companion: CompanionSnapshot;
-  recoveries: CaptureSnapshot[];
+  recoveries: CaptureRecoveryItem[];
   preflight: CapturePreflight;
   aiSettings: AiSettingsSnapshot;
 }
@@ -334,9 +334,10 @@ function peer(
   };
 }
 
-function recoveryFixtures(): CaptureSnapshot[] {
+function recoveryFixtures(): CaptureRecoveryItem[] {
   return [0, 1, 2, 3, 4, 5].map((index) => ({
     sessionId: `session-visual-recovery-000${index + 1}`,
+    title: `Recover-产品设计评审 ${index + 1}`,
     state: "recoverable",
     captureMode: "dual_track",
     captureTimelineMs: (index + 2) * 15 * 60_000,

@@ -156,6 +156,75 @@ describe("render-backed shell frame", () => {
     );
   });
 
+  it("replaces the default title and composes a fixed single-row footer outside the scroll owner", () => {
+    const contentRef = React.createRef<HTMLDivElement>();
+    const { container } = render(
+      <AppShellFrame
+        section="audio"
+        onNavigate={vi.fn()}
+        unreadActivityCount={0}
+        contextPane={null}
+        contextPaneWidth={300}
+        onTogglePane={vi.fn()}
+        title="录制详情"
+        customTitle={<input aria-label="录音名称" defaultValue="产品周会" />}
+        footer={<div data-testid="capture-controls">录制中 00:01:12</div>}
+        contentRef={contentRef}
+        history={{
+          canGoBack: true,
+          canGoForward: false,
+          onBack: vi.fn(),
+          onForward: vi.fn(),
+        }}
+      >
+        <p>实时字幕</p>
+      </AppShellFrame>,
+    );
+
+    expect(
+      screen.queryByRole("heading", { level: 1, name: "录制详情" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "录音名称" })).toBeVisible();
+
+    const main = screen.getByRole("main");
+    const header = main.querySelector('[data-shell-slot="content-head"]');
+    const content = main.querySelector('[data-shell-slot="content"]');
+    const footer = main.querySelector('[data-shell-slot="content-footer"]');
+    expect(Array.from(main.children)).toEqual([header, content, footer]);
+    expect(header).toHaveClass(
+      "h-[50px]",
+      "shrink-0",
+      "border-b",
+      "bg-background",
+    );
+    expect(header).not.toHaveClass("sticky");
+    expect(content).toHaveClass("min-h-0", "flex-1", "overflow-auto");
+    expect(contentRef.current).toBe(content);
+    expect(content).not.toContainElement(
+      screen.getByTestId("capture-controls"),
+    );
+    expect(footer).toContainElement(screen.getByTestId("capture-controls"));
+    expect(footer).toHaveClass(
+      "flex",
+      "shrink-0",
+      "flex-nowrap",
+      "items-center",
+      "border-t",
+      "bg-background",
+    );
+    expect(footer).not.toHaveClass(
+      "flex-wrap",
+      "hidden",
+      "shadow",
+      "sm:hidden",
+      "md:hidden",
+    );
+    expect(footer?.className).not.toMatch(/(?:sm|md|lg):/);
+    expect(
+      container.querySelectorAll('[data-shell-slot="content-footer"]'),
+    ).toHaveLength(1);
+  });
+
   it("suppresses pane transitions only while the primary section changes", () => {
     const transitionsAtLayout: string[][] = [];
     const layoutRead = vi
@@ -348,6 +417,11 @@ const readySnapshot: ApplicationSnapshot = {
   capability: { processing: "available" },
   library: { phase: "empty" },
   reconciliation: [],
+  capture: { phase: "idle" },
+};
+
+const recordingSnapshot: ApplicationSnapshot = {
+  ...readySnapshot,
   capture: {
     phase: "recording",
     sessionId: "capture-7",
@@ -437,6 +511,8 @@ function installApi(
     setFloatingCapturePreference: vi.fn(async (enabled) => ({ enabled })),
     startCapture: vi.fn(),
     controlCapture: vi.fn(),
+    suggestCaptureTitle: vi.fn(async () => ({ title: "新录音2026090501" })),
+    renameCaptureSession: vi.fn(async () => current),
     listCaptureRecoveries: vi.fn(async () => []),
     actOnCaptureRecovery: vi.fn(),
     getCaptionSnapshot: vi.fn(async () => null),
@@ -803,10 +879,14 @@ describe("application shell", () => {
     expect(document.getElementById("main-content")).toHaveClass("p-4");
     expect(document.getElementById("main-content")).not.toHaveClass("sm:p-6");
     expect(mains[0]!.querySelector("header")).toHaveClass(
-      "sticky",
-      "top-0",
+      "h-[50px]",
+      "shrink-0",
       "border-b",
       "bg-background",
+    );
+    expect(mains[0]!.querySelector("header")).not.toHaveClass(
+      "sticky",
+      "top-0",
     );
 
     await user.click(within(navigation).getByRole("button", { name: "设置" }));
@@ -1097,7 +1177,7 @@ describe("application shell", () => {
   });
 
   it("restores recording in the content area without global header controls", async () => {
-    const api = installApi(readySnapshot);
+    const api = installApi(recordingSnapshot);
     const user = userEvent.setup();
     render(<App />);
 
@@ -1105,7 +1185,10 @@ describe("application shell", () => {
       screen.getByRole("status", { name: "正在加载工作台" }),
     ).toBeVisible();
     expect(
-      await screen.findByRole("heading", { name: "录制详情", level: 1 }),
+      await screen.findByRole("button", { name: "产品周会" }),
+    ).toBeVisible();
+    expect(
+      document.querySelector('[data-shell-slot="custom-title"]'),
     ).toBeVisible();
     expect(
       document.querySelector('[data-slot="sidebar-inset"] > header'),
@@ -1131,8 +1214,14 @@ describe("application shell", () => {
       within(navigation).queryByRole("button", { name: "转写任务" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("complementary", { name: "音频上下文面板" }),
-    ).toHaveAttribute("data-presentation", "docked");
+      screen.queryByRole("complementary", { name: "音频上下文面板" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /音频上下文面板/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("separator", { name: /音频上下文面板宽度/ }),
+    ).not.toBeInTheDocument();
 
     expect(
       screen.queryByRole("complementary", { name: "录制控制" }),
@@ -1140,9 +1229,9 @@ describe("application shell", () => {
     expect(
       screen.queryByRole("button", { name: "正在录音" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "录制详情" })).toHaveTextContent(
-      "产品周会",
-    );
+    expect(
+      screen.getByRole("region", { name: "录制详情" }),
+    ).not.toHaveTextContent("产品周会");
     expect(
       screen.queryByRole("region", { name: "录制准备" }),
     ).not.toBeInTheDocument();
@@ -1321,7 +1410,7 @@ describe("application shell", () => {
     expect(screen.getByRole("button", { name: "后退" })).toBeVisible();
   });
 
-  it("opens a selected audio from recording setup after the back action is removed", async () => {
+  it("keeps recording setup fullscreen after the back action is removed", async () => {
     const summary = {
       audioId: 12,
       displayName: "已有录音.wav",
@@ -1335,12 +1424,7 @@ describe("application shell", () => {
     installApi(
       {
         ...readySnapshot,
-        capture: {
-          phase: "failed",
-          sessionId: "capture-failed-12",
-          title: "失败的录制",
-          elapsedMs: 1_000,
-        },
+        capture: { phase: "idle" },
       },
       {
         listAudios: vi.fn(async () => [summary]),
@@ -1379,15 +1463,14 @@ describe("application shell", () => {
     await waitFor(() => expect(newRecording).toBeEnabled());
     await user.click(newRecording);
     expect(
-      await screen.findByRole("heading", { name: "设置音频录制" }),
+      await screen.findByRole("button", { name: "新录音2026090501" }),
     ).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "打开 已有录音.wav" }));
-
+    expect(screen.getByRole("heading", { name: "设置音频录制" })).toBeVisible();
     expect(
-      await screen.findByRole("heading", { name: "已有录音.wav", level: 1 }),
-    ).toBeVisible();
+      screen.queryByRole("complementary", { name: "音频上下文面板" }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("region", { name: "录制详情" }),
+      screen.queryByRole("button", { name: "打开 已有录音.wav" }),
     ).not.toBeInTheDocument();
   });
 
@@ -1975,7 +2058,7 @@ describe("application shell", () => {
     ).toBeVisible();
   });
 
-  it("opens the exact capture recovery from a message and exposes its action", async () => {
+  it("prompts for recoveries before normal audio navigation", async () => {
     const targetedRecovery = {
       sessionId: "session-target-recovery-1234",
       state: "recoverable" as const,
@@ -1989,10 +2072,12 @@ describe("application shell", () => {
       gapCount: 0,
       interruptionReason: null,
       recordingSha256: null,
+      title: "Recover-录制中断，需要处理",
     };
     const otherRecovery = {
       ...targetedRecovery,
       sessionId: "session-other-recovery-12345",
+      title: "Recover-另一段录制",
       captureTimelineMs: 4_000,
     };
     const actOnCaptureRecovery = vi.fn(async () => null);
@@ -2022,30 +2107,38 @@ describe("application shell", () => {
         actOnCaptureRecovery,
       },
     );
-    const user = userEvent.setup();
     render(<App />);
 
-    await user.click(
-      await screen.findByRole("button", { name: "消息，1 条未读" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: /录制中断，需要处理/ }),
-    );
-    await user.click(
-      within(
-        screen.getByRole("dialog", { name: "录制中断，需要处理" }),
-      ).getByRole("button", { name: "打开录制详情" }),
-    );
-
+    const recoveryDialog = await screen.findByRole("dialog", {
+      name: "发现可恢复录制",
+    });
     expect(
-      await screen.findByRole("heading", { name: "录制详情", level: 1 }),
+      within(recoveryDialog).getByText(
+        "发现 2 段未完成的录音，可一次恢复并保存。",
+      ),
     ).toBeVisible();
-    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole("region", { name: "录制详情" })).toBeVisible();
-    await user.click(
-      screen.getAllByRole("button", { name: "保留并完成恢复" })[0]!,
+    expect(
+      within(recoveryDialog).queryByText("Recover-录制中断，需要处理"),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "录制详情", level: 1 }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "录制详情" })).toBeNull();
+    await userEvent
+      .setup()
+      .click(
+        within(recoveryDialog).getByRole("button", { name: "恢复所有录音" }),
+      );
+    await waitFor(() => expect(actOnCaptureRecovery).toHaveBeenCalledTimes(2));
+    expect(actOnCaptureRecovery).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        sessionId: otherRecovery.sessionId,
+        action: "keep",
+      }),
     );
-    expect(actOnCaptureRecovery).toHaveBeenCalledWith(
+    expect(actOnCaptureRecovery).toHaveBeenNthCalledWith(
+      2,
       expect.objectContaining({
         sessionId: targetedRecovery.sessionId,
         action: "keep",

@@ -34,6 +34,7 @@ import {
   type ImportAudioResponse,
   type OperationEvent,
   type CaptureSnapshot,
+  type CaptureRuntimeSnapshot,
   type CaptionSnapshot,
   type AudioAiSnapshot,
   type CompanionSnapshot,
@@ -269,7 +270,6 @@ let captureService: DesktopCaptureService | null = null;
 let captureNativeSession: MacOSNativeHelperSession | null = null;
 let microphoneTestService: MicrophoneTestService | null = null;
 let captureTray: Tray | null = null;
-let activeCaptureTitle = "音频录制";
 let captureLifecycleBound = false;
 let capturePollTimer: ReturnType<typeof setInterval> | null = null;
 let capturePollInFlight = false;
@@ -1934,6 +1934,7 @@ async function preflightCapture(options: {
 
 async function startCapture(options: {
   title: string;
+  refreshSuggestedTitle?: boolean;
   microphoneDeviceId?: string;
   captionEnabled: boolean;
   idempotencyKey: string;
@@ -1949,14 +1950,17 @@ async function startCapture(options: {
       `capture preflight failed: ${preflight.blockingReasons.join(",")}`,
     );
   }
-  const result = await captureService.start({
-    sessionId: `session-${randomUUID()}`,
-    title: options.title,
-    idempotencyKey: options.idempotencyKey,
-    minimumFreeBytes: minimumCaptureFreeBytes,
-    microphoneDeviceId: options.microphoneDeviceId,
-    captionEnabled: options.captionEnabled,
-  });
+  const result = await captureService.start(
+    {
+      sessionId: `session-${randomUUID()}`,
+      title: options.title,
+      idempotencyKey: options.idempotencyKey,
+      minimumFreeBytes: minimumCaptureFreeBytes,
+      microphoneDeviceId: options.microphoneDeviceId,
+      captionEnabled: options.captionEnabled,
+    },
+    { refreshSuggestedTitle: options.refreshSuggestedTitle === true },
+  );
   if (options.captionEnabled && preflight.captionModelAvailable) {
     const identity = resourceCatalog?.processingIdentity("live-caption");
     if (!identity || !liveCaptionService || !profilePaths) {
@@ -1968,7 +1972,6 @@ async function startCapture(options: {
       ...identity,
     });
   }
-  activeCaptureTitle = options.title;
   publishCapture(result);
   return result;
 }
@@ -2006,7 +2009,7 @@ async function performCaptureControl(options: {
     await finalizeCommittedCaptureTranscript({
       handoff: formalTranscriptHandoff,
       sessionId: options.sessionId,
-      displayName: activeCaptureTitle,
+      displayName: captureService.sessionTitle(options.sessionId),
       processing: null,
       publish: publishCaption,
       reportFailure: () =>
@@ -2017,9 +2020,16 @@ async function performCaptureControl(options: {
   return result;
 }
 
-function publishCapture(snapshot: CaptureSnapshot | null): void {
-  applicationState.setCapture(snapshot, activeCaptureTitle);
-  updateCaptureTray(snapshot);
+function publishCapture(
+  snapshot: CaptureSnapshot | null,
+  audioActivity = captureService?.audioActivity() ?? 0,
+): void {
+  const title =
+    snapshot && captureService
+      ? captureService.sessionTitle(snapshot.sessionId)
+      : "音频录制";
+  applicationState.setCapture(snapshot, title, audioActivity);
+  updateCaptureTray(snapshot, title);
 }
 
 function setupCaptureLifecycle(): void {
@@ -2059,6 +2069,7 @@ async function pollCaptureSnapshot(): Promise<void> {
       await liveCaptionService?.poll(refreshed.sessionId);
     }
   } catch (error) {
+    publishCapture(current, 0);
     console.error("Capture snapshot refresh failed", error);
   } finally {
     capturePollInFlight = false;
@@ -2091,14 +2102,19 @@ async function applyCaptureLifecycle(
   }
 }
 
-function updateCaptureTray(snapshot: CaptureSnapshot | null): void {
+function updateCaptureTray(
+  snapshot: CaptureSnapshot | null,
+  title = snapshot && captureService
+    ? captureService.sessionTitle(snapshot.sessionId)
+    : "音频录制",
+): void {
   if (!captureTray) return;
   const running = snapshot ? captureIsRunning(snapshot) : false;
   const paused = snapshot?.state === "paused";
   captureTray.setContextMenu(
     Menu.buildFromTemplate([
       {
-        label: running ? `正在录制 · ${activeCaptureTitle}` : "当前没有录制",
+        label: running && snapshot ? `正在录制 · ${title}` : "当前没有录制",
         enabled: false,
       },
       { type: "separator" },
@@ -2464,6 +2480,19 @@ function bindDesktopIpc(window: BrowserWindow): void {
     preflightCapture: async (options) => await preflightCapture(options),
     startCapture: async (options) => await startCapture(options),
     controlCapture: async (options) => await controlCapture(options),
+    suggestCaptureTitle: async () => {
+      if (!captureService) throw new Error("capture title is unavailable");
+      return captureService.suggestCaptureTitle();
+    },
+    renameCaptureSession: async (options) => {
+      if (!captureService) throw new Error("capture title is unavailable");
+      const renamed = captureService.renameSession(
+        options.sessionId,
+        options.title,
+      );
+      publishCapture(renamed.snapshot);
+      return applicationState.snapshot();
+    },
     startMicrophoneTest: async (options) => {
       if (!microphoneTestService) {
         throw new Error("麦克风测试暂不可用");
@@ -2531,7 +2560,7 @@ function bindDesktopIpc(window: BrowserWindow): void {
       await finalizeCommittedCaptureTranscript({
         handoff: formalTranscriptHandoff,
         sessionId: kept.sessionId,
-        displayName: activeCaptureTitle,
+        displayName: captureService.sessionTitle(kept.sessionId),
         processing: null,
         publish: publishCaption,
         reportFailure: () =>
@@ -3536,7 +3565,6 @@ async function initializeCapture(
     profile.captureDirectory,
   );
   const recoveries = await captureService.recover();
-  activeCaptureTitle = recoveries.length > 0 ? "中断的音频录制" : "音频录制";
   publishCapture(recoveries[0] ?? captureService.snapshot());
 }
 
@@ -3946,26 +3974,30 @@ async function runCaptureSmokeIfRequested(): Promise<void> {
     recordingSha256: null,
     journalSha256: null,
   });
+  const runtimeRecording = (): CaptureRuntimeSnapshot => ({
+    ...recording(),
+    audioActivity: 0,
+  });
   const smokeNative: CaptureNativePort = {
     preflight: async () => {
       throw new Error("smoke preflight is unavailable");
     },
-    start: async () => recording(),
-    pause: async () => ({ ...recording(), state: "paused" }),
-    resume: async () => recording(),
+    start: async () => runtimeRecording(),
+    pause: async () => ({ ...runtimeRecording(), state: "paused" }),
+    resume: async () => runtimeRecording(),
     stop: async () => {
       captureSmokeStopCalls += 1;
       return {
-        ...recording(),
+        ...runtimeRecording(),
         state: "completed",
         microphoneHealthy: false,
         recordingSha256: smokeHash,
         journalSha256: smokeHash,
       };
     },
-    systemSleep: async () => ({ ...recording(), state: "paused" }),
-    systemWake: async () => ({ ...recording(), state: "paused" }),
-    snapshot: async () => recording(),
+    systemSleep: async () => ({ ...runtimeRecording(), state: "paused" }),
+    systemWake: async () => ({ ...runtimeRecording(), state: "paused" }),
+    snapshot: async () => runtimeRecording(),
     recover: async () => [],
     discard: async () => undefined,
     startMicrophoneTest: async (testId) => ({

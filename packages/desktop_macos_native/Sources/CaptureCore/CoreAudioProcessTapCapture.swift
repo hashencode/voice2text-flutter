@@ -28,6 +28,8 @@ final class CoreAudioProcessTapCapture {
   private var bufferHandler: ((AVAudioPCMBuffer) -> Void)?
   private var ioProcID: AudioDeviceIOProcID?
   private var started = false
+  private let meterLock = NSLock()
+  private var meterAccumulator = MicrophoneMeterAccumulator()
 
   init(bufferHandler: ((AVAudioPCMBuffer) -> Void)? = nil) {
     self.bufferHandler = bufferHandler
@@ -107,14 +109,23 @@ final class CoreAudioProcessTapCapture {
         self.observedFrames &+= UInt64(
           byteCount / max(1, self.bytesPerFrame)
         )
-        guard let handler = self.bufferHandler,
-          let copied = self.copyInputBuffer(inputData)
-        else {
-          return
+        guard let copied = self.copyInputBuffer(inputData) else { return }
+        if case let .samples(_, normalizedRMS, normalizedPeak) =
+          Self.measureActivity(copied)
+        {
+          self.meterLock.lock()
+          self.normalizedPeak = normalizedPeak
+          self.meterAccumulator.record(
+            normalizedRMS: normalizedRMS,
+            normalizedPeak: normalizedPeak,
+            at: DispatchTime.now().uptimeNanoseconds
+          )
+          self.meterLock.unlock()
         }
-        self.normalizedPeak = Self.peak(copied)
-        self.deliveredFrames &+= UInt64(copied.frameLength)
-        handler(copied)
+        if let handler = self.bufferHandler {
+          self.deliveredFrames &+= UInt64(copied.frameLength)
+          handler(copied)
+        }
       }
       guard status == noErr, nextIOProcID != nil else {
         throw DesktopSystemAudioCaptureError.start(status)
@@ -136,38 +147,27 @@ final class CoreAudioProcessTapCapture {
     throw DesktopSystemAudioCaptureError.start(status)
   }
 
-  private static func peak(_ buffer: AVAudioPCMBuffer) -> Double {
-    let frameCount = Int(buffer.frameLength)
-    let channelCount = Int(buffer.format.channelCount)
-    guard frameCount > 0, channelCount > 0 else { return 0 }
-    var peak: Float = 0
-    if let channels = buffer.floatChannelData {
-      for channel in 0..<channelCount {
-        for frame in 0..<frameCount {
-          peak = max(peak, abs(channels[channel][frame]))
-        }
-      }
-      return min(1, max(0, Double(peak)))
-    }
-    if let channels = buffer.int16ChannelData {
-      var integerPeak: Int32 = 0
-      for channel in 0..<channelCount {
-        for frame in 0..<frameCount {
-          integerPeak = max(
-            integerPeak,
-            abs(Int32(channels[channel][frame]))
-          )
-        }
-      }
-      return min(1, Double(integerPeak) / Double(Int16.max))
-    }
-    return 0
+  func meterSnapshot() -> Double {
+    meterLock.lock()
+    defer { meterLock.unlock() }
+    return meterAccumulator.consume(
+      at: DispatchTime.now().uptimeNanoseconds
+    ).normalizedPeak
+  }
+
+  static func measureActivity(
+    _ buffer: AVAudioPCMBuffer
+  ) -> MicrophonePCMBufferMeterResult {
+    MicrophonePCMBufferMeter.measure(buffer)
   }
 
   func pause() {
     guard started else { return }
     AudioDeviceStop(aggregateDeviceID, ioProcID)
     started = false
+    meterLock.lock()
+    meterAccumulator.reset()
+    meterLock.unlock()
   }
 
   func teardown() {

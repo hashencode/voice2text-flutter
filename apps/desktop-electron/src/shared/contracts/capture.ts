@@ -2,6 +2,12 @@ import { z } from "zod";
 
 import { sha256Schema } from "./import_processing";
 
+export const captureSessionIdSchema = z
+  .string()
+  .regex(/^session-[a-zA-Z0-9-]{12,120}$/);
+export const captureTitleSchema = z.string().trim().min(1).max(256);
+export const captureAudioActivitySchema = z.number().finite().min(0).max(1);
+
 export const captureSessionStateSchema = z.enum([
   "idle",
   "preflight",
@@ -51,7 +57,7 @@ export const capturePreflightSchema = z
   .strict();
 export const captureSnapshotSchema = z
   .object({
-    sessionId: z.string().regex(/^session-[a-zA-Z0-9-]{12,120}$/),
+    sessionId: captureSessionIdSchema,
     state: captureSessionStateSchema.exclude(["idle", "preflight"]),
     captureMode: captureModeSchema,
     captureTimelineMs: z.number().int().nonnegative().safe(),
@@ -78,11 +84,28 @@ export const captureSnapshotSchema = z
       .optional(),
   })
   .strict();
+export const captureRuntimeSnapshotSchema = captureSnapshotSchema.extend({
+  audioActivity: captureAudioActivitySchema,
+});
+export const captureRecoveryItemSchema = captureSnapshotSchema.extend({
+  title: captureTitleSchema,
+});
+
+export const suggestCaptureTitleRequestSchema = z.object({}).strict();
+export const suggestCaptureTitleResponseSchema = z
+  .object({ title: captureTitleSchema })
+  .strict();
+export const renameCaptureSessionRequestSchema = z
+  .object({
+    sessionId: captureSessionIdSchema,
+    title: captureTitleSchema,
+  })
+  .strict();
 
 export const captureStartCommandSchema = z
   .object({
-    sessionId: z.string().regex(/^session-[a-zA-Z0-9-]{12,120}$/),
-    title: z.string().trim().min(1).max(256),
+    sessionId: captureSessionIdSchema,
+    title: captureTitleSchema,
     idempotencyKey: z.string().min(1).max(160),
     minimumFreeBytes: z
       .number()
@@ -96,7 +119,7 @@ export const captureStartCommandSchema = z
 export const captureControlCommandSchema = z
   .object({
     action: z.enum(["pause", "resume", "stop"]),
-    sessionId: z.string().regex(/^session-[a-zA-Z0-9-]{12,120}$/),
+    sessionId: captureSessionIdSchema,
     idempotencyKey: z.string().min(1).max(160),
   })
   .strict();
@@ -109,7 +132,8 @@ export const capturePreflightRequestSchema = z
   .strict();
 export const captureStartRequestSchema = z
   .object({
-    title: z.string().trim().min(1).max(256),
+    title: captureTitleSchema,
+    refreshSuggestedTitle: z.boolean().optional(),
     microphoneDeviceId: z.string().min(1).max(512).optional(),
     captionEnabled: z.boolean(),
     idempotencyKey: z.string().min(12).max(160),
@@ -118,14 +142,14 @@ export const captureStartRequestSchema = z
 export const captureControlRequestSchema = z
   .object({
     action: z.enum(["pause", "resume", "stop"]),
-    sessionId: z.string().regex(/^session-[a-zA-Z0-9-]{12,120}$/),
+    sessionId: captureSessionIdSchema,
     idempotencyKey: z.string().min(12).max(160),
   })
   .strict();
 export const captureRecoveryActionRequestSchema = z
   .object({
     action: z.enum(["keep", "discard"]),
-    sessionId: z.string().regex(/^session-[a-zA-Z0-9-]{12,120}$/),
+    sessionId: captureSessionIdSchema,
     idempotencyKey: z.string().min(12).max(160),
   })
   .strict();
@@ -262,6 +286,16 @@ export const desktopCaptureParitySchema = z
 
 export type CapturePreflight = z.infer<typeof capturePreflightSchema>;
 export type CaptureSnapshot = z.infer<typeof captureSnapshotSchema>;
+export type CaptureRuntimeSnapshot = z.infer<
+  typeof captureRuntimeSnapshotSchema
+>;
+export type CaptureRecoveryItem = z.infer<typeof captureRecoveryItemSchema>;
+export type SuggestCaptureTitleResponse = z.infer<
+  typeof suggestCaptureTitleResponseSchema
+>;
+export type RenameCaptureSessionRequest = z.infer<
+  typeof renameCaptureSessionRequestSchema
+>;
 export type CaptureStartCommand = z.infer<typeof captureStartCommandSchema>;
 export type CaptureControlCommand = z.infer<typeof captureControlCommandSchema>;
 export type CaptureControlRequest = z.infer<typeof captureControlRequestSchema>;

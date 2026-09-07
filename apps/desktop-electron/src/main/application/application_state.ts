@@ -99,6 +99,7 @@ export class DesktopApplicationState {
   setCapture(
     capture: CaptureSnapshot | null,
     title = "音频录制",
+    audioActivity = 0,
   ): ApplicationSnapshot {
     if (!capture) return this.update({ capture: { phase: "idle" } });
     const phase = capture.state === "recoverable" ? "recovery" : capture.state;
@@ -109,6 +110,7 @@ export class DesktopApplicationState {
         sessionId: capture.sessionId,
         title,
         elapsedMs: capture.captureTimelineMs,
+        audioActivity,
         captureMode: capture.captureMode,
         systemAudioHealthy: capture.systemAudioHealthy,
         microphoneHealthy: capture.microphoneHealthy,

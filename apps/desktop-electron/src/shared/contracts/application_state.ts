@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { desktopProtocolVersion } from "./ipc";
+import { captureAudioActivitySchema } from "./capture";
 
 export const shellSectionSchema = z.enum([
   "library",
@@ -81,6 +82,7 @@ const captureStateSchema = z.discriminatedUnion("phase", [
       sessionId: z.string().min(1).max(128),
       title: z.string().min(1).max(256),
       elapsedMs: z.number().int().nonnegative(),
+      audioActivity: captureAudioActivitySchema.optional(),
       message: z.string().min(1).max(512).optional(),
       captureMode: z
         .enum(["dual_track", "microphone_only", "system_audio_only"])

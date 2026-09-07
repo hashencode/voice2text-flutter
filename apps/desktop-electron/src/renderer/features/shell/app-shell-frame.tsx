@@ -37,6 +37,7 @@ type AppShellFrameProps = React.PropsWithChildren<{
   paneTriggerRef?: React.Ref<HTMLButtonElement>;
   title: string;
   titleRef?: React.Ref<HTMLHeadingElement>;
+  customTitle?: React.ReactNode;
   showHeader?: boolean;
   history: {
     canGoBack: boolean;
@@ -49,6 +50,7 @@ type AppShellFrameProps = React.PropsWithChildren<{
   contentRef?: React.Ref<HTMLDivElement>;
   contentPadding?: "none" | "compact" | "page";
   contentTone?: "default" | "muted";
+  footer?: React.ReactNode;
 }>;
 
 // Independently composed from the pinned public render; controllers own all state.
@@ -64,6 +66,7 @@ export function AppShellFrame({
   paneTriggerRef,
   title,
   titleRef,
+  customTitle,
   showHeader = true,
   history,
   actions,
@@ -71,6 +74,7 @@ export function AppShellFrame({
   contentRef,
   contentPadding = "none",
   contentTone = "default",
+  footer,
   children,
 }: AppShellFrameProps) {
   const [contextPaneResizing, setContextPaneResizing] = React.useState(false);
@@ -133,7 +137,7 @@ export function AppShellFrame({
         {showHeader ? (
           <header
             data-shell-slot="content-head"
-            className="sticky top-0 z-10 flex h-[50px] shrink-0 items-center gap-1.5 border-b bg-background px-4"
+            className="flex h-[50px] shrink-0 items-center gap-1.5 border-b bg-background px-4"
           >
             <Button
               type="button"
@@ -150,14 +154,20 @@ export function AppShellFrame({
               orientation="vertical"
               className="mx-2 data-[orientation=vertical]:h-5"
             />
-            <h1
-              ref={titleRef}
-              tabIndex={-1}
-              className="min-w-0 flex-1 truncate text-sm leading-snug font-semibold"
-              data-slot="content-title"
-            >
-              {title}
-            </h1>
+            {customTitle !== undefined ? (
+              <div data-shell-slot="custom-title" className="min-w-0 flex-1">
+                {customTitle}
+              </div>
+            ) : (
+              <h1
+                ref={titleRef}
+                tabIndex={-1}
+                className="min-w-0 flex-1 truncate text-sm leading-snug font-semibold"
+                data-slot="content-title"
+              >
+                {title}
+              </h1>
+            )}
             {actions ? (
               <div data-shell-slot="page-actions" className="ml-auto shrink-0">
                 {actions}
@@ -184,6 +194,14 @@ export function AppShellFrame({
         >
           {children}
         </div>
+        {footer ? (
+          <footer
+            data-shell-slot="content-footer"
+            className="flex w-full shrink-0 flex-nowrap items-center border-t bg-background"
+          >
+            {footer}
+          </footer>
+        ) : null}
       </SidebarInset>
     </SidebarProvider>
   );

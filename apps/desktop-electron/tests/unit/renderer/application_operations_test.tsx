@@ -113,6 +113,8 @@ function installOperationsApi(overrides: Partial<Voice2TextDesktopApi> = {}) {
     preflightCapture: vi.fn(),
     startCapture: vi.fn(),
     controlCapture: vi.fn(),
+    suggestCaptureTitle: vi.fn(async () => ({ title: "新录音2026090501" })),
+    renameCaptureSession: vi.fn(async () => tasksSnapshot),
     listCaptureRecoveries: vi.fn(async () => []),
     actOnCaptureRecovery: vi.fn(),
     getCaptionSnapshot: vi.fn(async () => null),

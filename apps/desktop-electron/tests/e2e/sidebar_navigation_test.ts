@@ -91,6 +91,8 @@ function applicationApi(
     })),
     startCapture: vi.fn(),
     controlCapture: vi.fn(),
+    suggestCaptureTitle: vi.fn(async () => ({ title: "新录音2026090501" })),
+    renameCaptureSession: vi.fn(async () => snapshot),
     listCaptureRecoveries: vi.fn(async () => []),
     actOnCaptureRecovery: vi.fn(),
     getCaptionSnapshot: vi.fn(async () => null),
@@ -155,12 +157,7 @@ const restored: ApplicationSnapshot = {
   capability: { processing: "available" },
   library: { phase: "empty" },
   reconciliation: [],
-  capture: {
-    phase: "paused",
-    sessionId: "capture-restored",
-    title: "访谈",
-    elapsedMs: 10_000,
-  },
+  capture: { phase: "idle" },
 };
 
 describe("sidebar navigation e2e", () => {

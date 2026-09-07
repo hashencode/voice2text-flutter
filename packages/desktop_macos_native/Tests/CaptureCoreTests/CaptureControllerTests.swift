@@ -316,6 +316,33 @@ final class CaptureControllerTests: XCTestCase {
     XCTAssertEqual(captureModeForAvailableTracks(systemAudio: false, microphone: true), "microphone_only")
   }
 
+  func testCaptureAudioActivityUsesHealthyTrackMaximumOnlyWhileRunning() {
+    XCTAssertEqual(
+      CaptureController.audioActivity(
+        state: "recording", systemHealthy: true, systemLevel: 0.35,
+        microphoneHealthy: true, microphoneLevel: 0.8
+      ),
+      0.8
+    )
+    XCTAssertEqual(
+      CaptureController.audioActivity(
+        state: "partial_capture", systemHealthy: false, systemLevel: 0.95,
+        microphoneHealthy: true, microphoneLevel: 0.4
+      ),
+      0.4
+    )
+    for state in ["paused", "finalizing", "completed", "failed", "recoverable"] {
+      XCTAssertEqual(
+        CaptureController.audioActivity(
+          state: state, systemHealthy: true, systemLevel: 0.9,
+          microphoneHealthy: true, microphoneLevel: 0.7
+        ),
+        0,
+        state
+      )
+    }
+  }
+
   func testJournalSyncsFileBeforeItsParentDirectory() throws {
     let root = try temporaryRoot().appendingPathComponent(
       "session-durability-123456", isDirectory: true

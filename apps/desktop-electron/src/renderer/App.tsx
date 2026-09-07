@@ -23,7 +23,7 @@ import {
   type AudioRouteController,
   useAudioRouteController,
 } from "@/features/audios/audio-route-feature";
-import { CaptureWorkspace } from "@/features/capture/capture-workspace";
+import { CaptureWorkspaceController } from "@/features/capture/capture-workspace";
 import {
   CompanionContextPane,
   CompanionContextPaneFooter,
@@ -567,6 +567,7 @@ function App() {
     companion,
   );
   const paneStructurallyAvailable =
+    !captureDetailVisible &&
     (current !== "audio" || audio.libraryPresentation === "populated") &&
     (current !== "messages" || activityItems.length > 0);
   const audioWorkspacePresentation =
@@ -581,199 +582,203 @@ function App() {
     activityItems.length === 0;
   const fullScreenEmptyPresentation =
     audioFirstUsePresentation || messageEmptyPresentation;
+  let contentPadding: "none" | "compact" | "page" = "none";
+  if (presentation.contentMode === "padded") {
+    if (fullScreenEmptyPresentation) contentPadding = "none";
+    else if (audioWorkspacePresentation) contentPadding = "compact";
+    else contentPadding = "page";
+  }
   return (
-    <AppShellFrame
-      section={current}
-      onNavigate={navigatePrimary}
-      unreadActivityCount={unreadActivityItems.length}
-      contextPaneWidth={contextPaneWidth.effectiveWidth}
-      contextPaneResize={{
-        minimum: contextPaneWidth.limits.minimum,
-        maximum: contextPaneWidth.limits.maximum,
-        disabled: applicationBlocked || modalOpen,
-        onChange: contextPaneWidth.setRequestedWidth,
-      }}
-      contextPane={
-        paneStructurallyAvailable
-          ? {
-              open: pane.open,
-              section: pane.paneSection,
-              presentation: pane.presentation,
-              onRequestClose: requestPaneClose,
-              search:
-                pane.paneSection === "audio" ? (
-                  <AudioContextPaneSearch controller={audio} />
-                ) : pane.paneSection === "messages" ? (
-                  <ActivityContextPaneSearch
-                    value={activityQuery}
-                    onValueChange={setActivityQuery}
-                  />
-                ) : undefined,
-              head:
-                pane.paneSection === "audio" && audio.workspace !== null ? (
-                  <AudioContextPaneHeader controller={audio} />
-                ) : pane.paneSection === "messages" ? (
-                  <ActivityContextPaneHead
-                    unreadCount={unreadActivityItems.length}
-                    markAllPending={markAllActivityPending}
-                    onMarkAllRead={() => void markAllActivityRead()}
-                  />
-                ) : null,
-              filters:
-                pane.paneSection === "audio" ? (
-                  <AudioContextPaneFilters controller={audio} />
-                ) : pane.paneSection === "messages" ? (
-                  <ActivityContextPaneFilters
-                    items={activityItems}
-                    value={activityFilter}
-                    onValueChange={setActivityFilter}
-                  />
-                ) : undefined,
-              footer:
-                pane.paneSection === "companion" &&
-                companion.view.kind === "device" ? (
-                  <CompanionContextPaneFooter controller={companion} />
-                ) : null,
-              children:
-                pane.paneSection === "audio" ? (
-                  <AudioContextPane controller={audio} />
-                ) : pane.paneSection === "companion" ? (
-                  <CompanionContextPane controller={companion} />
-                ) : pane.paneSection === "messages" ? (
-                  <ActivityContextPane
-                    items={activityItems}
-                    selectedId={selectedActivity?.id ?? null}
-                    onSelect={(item) => {
-                      setSelectedActivityId(item.id);
-                      void markActivityRead(item);
-                      void navigateSection(
-                        "messages",
-                        `/messages/${encodeURIComponent(item.id)}`,
-                      );
-                      if (item.kind === "capture_failed") {
-                        setActivityError(item);
-                      }
-                    }}
-                    unreadCount={unreadActivityItems.length}
-                    markAllPending={markAllActivityPending}
-                    operationError={activityOperationError}
-                    onMarkAllRead={() => void markAllActivityRead()}
-                    query={activityQuery}
-                    filter={activityFilter}
-                  />
-                ) : (
-                  <SettingsContextPane
-                    value={settingsSection}
-                    onValueChange={navigateSettingsSection}
-                  />
-                ),
-            }
-          : null
-      }
-      paneTriggerRef={paneTriggerRef}
-      onTogglePane={requestPaneToggle}
-      title={contentTitle}
-      titleRef={contentTitleRef}
-      showHeader={!fullScreenEmptyPresentation}
-      history={{
-        canGoBack: activeRoute.canGoBack,
-        canGoForward: activeRoute.canGoForward,
-        onBack: () => void navigateSectionDelta(current, -1),
-        onForward: () => void navigateSectionDelta(current, 1),
-      }}
-      actions={
-        audioWorkspacePresentation ? (
-          <AudioMainHeaderActions controller={audio} />
-        ) : null
-      }
-      notice={snapshot.connectivity === "offline" ? <OfflineBanner /> : null}
-      contentRef={mainContentRef}
-      contentPadding={
-        presentation.contentMode === "padded"
-          ? fullScreenEmptyPresentation
-            ? "none"
-            : audioWorkspacePresentation
-              ? "compact"
-              : "page"
-          : "none"
-      }
-      contentTone={current === "settings" ? "muted" : "default"}
-    >
-      <SectionContentProvider
-        content={
-          <>
-            {!captureDetailVisible && presentation.renderContent ? (
-              <ShellContent
-                snapshot={snapshot}
-                operationError={operationError}
-                audio={audio}
-                companion={companion}
-                onOpenCompanionPane={openPane}
-                current={current}
-                selectedActivity={selectedActivity}
-                onOpenActivityDetails={openActivityDetails}
-                settingsSection={settingsSection}
-              />
-            ) : null}
-            <CaptureWorkspace
-              capture={snapshot.capture}
-              recordRequest={recordRequest}
-              detailOpen={captureDetailVisible}
-              focusSessionId={routedCaptureSessionId ?? captureDetailSessionId}
-              autoOpenRecoveries={current === "audio"}
-              onPreflightResolved={audio.acceptCapturePreflight}
-              onDetailOpenChange={(open) => {
-                if (!open && routedCaptureSessionId) {
-                  if (activeRoute.canGoBack) {
-                    void navigateSectionDelta(current, -1);
-                  } else {
-                    void navigateSection(
-                      current,
-                      captureOwnerPath(routeDestination),
-                      { replace: true },
-                    );
-                  }
-                  return;
-                }
-                changeCaptureDetail(open);
-              }}
-              onOpenLocalModels={() => {
-                openLocalModels();
-              }}
-            />
-          </>
+    <CaptureWorkspaceController
+      capture={snapshot.capture}
+      recordRequest={recordRequest}
+      detailOpen={captureDetailVisible}
+      focusSessionId={routedCaptureSessionId ?? captureDetailSessionId}
+      autoOpenRecoveries={current === "audio"}
+      onPreflightResolved={audio.acceptCapturePreflight}
+      onDetailOpenChange={(open) => {
+        if (!open && routedCaptureSessionId) {
+          if (activeRoute.canGoBack) {
+            void navigateSectionDelta(current, -1);
+          } else {
+            void navigateSection(current, captureOwnerPath(routeDestination), {
+              replace: true,
+            });
+          }
+          return;
         }
-      >
-        <SectionRouterProvider section={current} />
-      </SectionContentProvider>
-      <ActivityErrorDialog
-        item={activityError}
-        open={activityError !== null}
-        onOpenChange={(open) => {
-          if (!open) setActivityError(null);
-        }}
-        onOpenDetails={openActivityDetails}
-      />
-      <CapabilityUnavailableDialog
-        reason={processingUnavailableReason ?? ""}
-        open={processingUnavailableReason !== null}
-        onOpenChange={(open) => {
-          if (!open) setProcessingUnavailableReason(null);
-        }}
-        onOpenLocalModels={() => {
-          setProcessingUnavailableReason(null);
-          openLocalModels();
-        }}
-      />
-      {profileBlocker ? (
-        <ProfileBlocker
-          profile={profileBlocker.profile}
-          pending={bootstrapPending}
-          error={bootstrapError}
-          onRecheck={requestBootstrapAction}
-        />
-      ) : null}
-    </AppShellFrame>
+        changeCaptureDetail(open);
+      }}
+      onOpenLocalModels={openLocalModels}
+    >
+      {(captureWorkspace) => (
+        <AppShellFrame
+          section={current}
+          onNavigate={navigatePrimary}
+          unreadActivityCount={unreadActivityItems.length}
+          contextPaneWidth={contextPaneWidth.effectiveWidth}
+          contextPaneResize={{
+            minimum: contextPaneWidth.limits.minimum,
+            maximum: contextPaneWidth.limits.maximum,
+            disabled: applicationBlocked || modalOpen,
+            onChange: contextPaneWidth.setRequestedWidth,
+          }}
+          contextPane={
+            paneStructurallyAvailable
+              ? {
+                  open: pane.open,
+                  section: pane.paneSection,
+                  presentation: pane.presentation,
+                  onRequestClose: requestPaneClose,
+                  search:
+                    pane.paneSection === "audio" ? (
+                      <AudioContextPaneSearch controller={audio} />
+                    ) : pane.paneSection === "messages" ? (
+                      <ActivityContextPaneSearch
+                        value={activityQuery}
+                        onValueChange={setActivityQuery}
+                      />
+                    ) : undefined,
+                  head:
+                    pane.paneSection === "audio" && audio.workspace !== null ? (
+                      <AudioContextPaneHeader controller={audio} />
+                    ) : pane.paneSection === "messages" ? (
+                      <ActivityContextPaneHead
+                        unreadCount={unreadActivityItems.length}
+                        markAllPending={markAllActivityPending}
+                        onMarkAllRead={() => void markAllActivityRead()}
+                      />
+                    ) : null,
+                  filters:
+                    pane.paneSection === "audio" ? (
+                      <AudioContextPaneFilters controller={audio} />
+                    ) : pane.paneSection === "messages" ? (
+                      <ActivityContextPaneFilters
+                        items={activityItems}
+                        value={activityFilter}
+                        onValueChange={setActivityFilter}
+                      />
+                    ) : undefined,
+                  footer:
+                    pane.paneSection === "companion" &&
+                    companion.view.kind === "device" ? (
+                      <CompanionContextPaneFooter controller={companion} />
+                    ) : null,
+                  children:
+                    pane.paneSection === "audio" ? (
+                      <AudioContextPane controller={audio} />
+                    ) : pane.paneSection === "companion" ? (
+                      <CompanionContextPane controller={companion} />
+                    ) : pane.paneSection === "messages" ? (
+                      <ActivityContextPane
+                        items={activityItems}
+                        selectedId={selectedActivity?.id ?? null}
+                        onSelect={(item) => {
+                          setSelectedActivityId(item.id);
+                          void markActivityRead(item);
+                          void navigateSection(
+                            "messages",
+                            `/messages/${encodeURIComponent(item.id)}`,
+                          );
+                          if (item.kind === "capture_failed") {
+                            setActivityError(item);
+                          }
+                        }}
+                        unreadCount={unreadActivityItems.length}
+                        markAllPending={markAllActivityPending}
+                        operationError={activityOperationError}
+                        onMarkAllRead={() => void markAllActivityRead()}
+                        query={activityQuery}
+                        filter={activityFilter}
+                      />
+                    ) : (
+                      <SettingsContextPane
+                        value={settingsSection}
+                        onValueChange={navigateSettingsSection}
+                      />
+                    ),
+                }
+              : null
+          }
+          paneTriggerRef={paneTriggerRef}
+          onTogglePane={requestPaneToggle}
+          title={contentTitle}
+          titleRef={contentTitleRef}
+          customTitle={
+            captureDetailVisible ? captureWorkspace.customTitle : undefined
+          }
+          showHeader={!fullScreenEmptyPresentation}
+          history={{
+            canGoBack: activeRoute.canGoBack,
+            canGoForward: activeRoute.canGoForward,
+            onBack: () => void navigateSectionDelta(current, -1),
+            onForward: () => void navigateSectionDelta(current, 1),
+          }}
+          actions={
+            audioWorkspacePresentation ? (
+              <AudioMainHeaderActions controller={audio} />
+            ) : null
+          }
+          notice={
+            snapshot.connectivity === "offline" ? <OfflineBanner /> : null
+          }
+          contentRef={mainContentRef}
+          contentPadding={contentPadding}
+          contentTone={current === "settings" ? "muted" : "default"}
+          footer={captureDetailVisible ? captureWorkspace.footer : null}
+        >
+          <SectionContentProvider
+            content={
+              <>
+                {!captureDetailVisible && presentation.renderContent ? (
+                  <ShellContent
+                    snapshot={snapshot}
+                    operationError={operationError}
+                    audio={audio}
+                    companion={companion}
+                    onOpenCompanionPane={openPane}
+                    current={current}
+                    selectedActivity={selectedActivity}
+                    onOpenActivityDetails={openActivityDetails}
+                    settingsSection={settingsSection}
+                  />
+                ) : null}
+                {captureWorkspace.content}
+              </>
+            }
+          >
+            <SectionRouterProvider section={current} />
+          </SectionContentProvider>
+          <ActivityErrorDialog
+            item={activityError}
+            open={activityError !== null}
+            onOpenChange={(open) => {
+              if (!open) setActivityError(null);
+            }}
+            onOpenDetails={openActivityDetails}
+          />
+          <CapabilityUnavailableDialog
+            reason={processingUnavailableReason ?? ""}
+            open={processingUnavailableReason !== null}
+            onOpenChange={(open) => {
+              if (!open) setProcessingUnavailableReason(null);
+            }}
+            onOpenLocalModels={() => {
+              setProcessingUnavailableReason(null);
+              openLocalModels();
+            }}
+          />
+          {profileBlocker ? (
+            <ProfileBlocker
+              profile={profileBlocker.profile}
+              pending={bootstrapPending}
+              error={bootstrapError}
+              onRecheck={requestBootstrapAction}
+            />
+          ) : null}
+        </AppShellFrame>
+      )}
+    </CaptureWorkspaceController>
   );
 }
 
@@ -809,7 +814,7 @@ function hasCaptureDetail(
   capture: ApplicationSnapshot["capture"] | undefined,
 ): boolean {
   return Boolean(
-    capture && capture.phase !== "idle" && capture.phase !== "completed",
+    capture && !["idle", "completed", "recovery"].includes(capture.phase),
   );
 }
 

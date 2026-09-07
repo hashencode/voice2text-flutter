@@ -680,6 +680,10 @@ public final class CaptureController {
     try stateQueue.sync { try currentSnapshotLocked(sessionId: sessionId) }
   }
 
+  public func currentAudioActivity() -> Double {
+    stateQueue.sync { audioActivityLocked() }
+  }
+
   private func currentSnapshotLocked(sessionId: String) throws -> CaptureSnapshot {
     try requireSession(sessionId)
     return snapshot()
@@ -768,6 +772,38 @@ public final class CaptureController {
       invalidFinalizedChunks: nil,
       quarantinedTailChunks: nil
     )
+  }
+
+  private func audioActivityLocked() -> Double {
+    let microphoneLevel = microphoneCapture?.meterSnapshot().normalizedPeak ?? 0
+    let systemLevel: Double
+    if #available(macOS 14.2, *),
+      let system = systemCapture as? CoreAudioProcessTapCapture
+    {
+      systemLevel = system.meterSnapshot()
+    } else {
+      systemLevel = 0
+    }
+    return Self.audioActivity(
+      state: state,
+      systemHealthy: systemHealthy,
+      systemLevel: systemLevel,
+      microphoneHealthy: microphoneHealthy,
+      microphoneLevel: microphoneLevel
+    )
+  }
+
+  static func audioActivity(
+    state: String,
+    systemHealthy: Bool,
+    systemLevel: Double,
+    microphoneHealthy: Bool,
+    microphoneLevel: Double
+  ) -> Double {
+    guard state == "recording" || state == "partial_capture" else { return 0 }
+    let system = systemHealthy ? min(1, max(0, systemLevel)) : 0
+    let microphone = microphoneHealthy ? min(1, max(0, microphoneLevel)) : 0
+    return max(system, microphone)
   }
 
   private static func snapshot(

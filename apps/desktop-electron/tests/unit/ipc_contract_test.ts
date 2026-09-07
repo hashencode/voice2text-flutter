@@ -12,6 +12,10 @@ import {
   audioAiSnapshotSchema,
   bootstrapActionRequestSchema,
   cancelProcessingRequestSchema,
+  captureAudioActivitySchema,
+  captureRuntimeSnapshotSchema,
+  captureSnapshotSchema,
+  applicationSnapshotSchema,
   createAiProviderProfileRequestSchema,
   deleteAiProviderProfileRequestSchema,
   desktopErrorSchema,
@@ -21,13 +25,152 @@ import {
   microphoneSettingsOpenRequestSchema,
   microphoneTestSnapshotSchema,
   operationEventSchema,
+  renameCaptureSessionRequestSchema,
   selectAiProviderProfileRequestSchema,
+  suggestCaptureTitleResponseSchema,
   updateAiProviderProfileRequestSchema,
   workerHealthRequestSchema,
 } from "../../src/shared/contracts/index";
 import { createDesktopApi } from "../../src/preload/api";
 
 describe("shared IPC contracts", () => {
+  it("validates capture naming and keeps runtime activity ephemeral", () => {
+    const sessionId = "session-capture-123456";
+    expect(
+      renameCaptureSessionRequestSchema.parse({
+        sessionId,
+        title: "  产品回访  ",
+      }),
+    ).toEqual({ sessionId, title: "产品回访" });
+    for (const invalid of [
+      { sessionId: "bad", title: "产品回访" },
+      { sessionId, title: "" },
+      { sessionId, title: "   " },
+      { sessionId, title: "x".repeat(257) },
+    ]) {
+      expect(() => renameCaptureSessionRequestSchema.parse(invalid)).toThrow();
+    }
+
+    expect(
+      suggestCaptureTitleResponseSchema.parse({ title: "新录音2026070101" }),
+    ).toEqual({ title: "新录音2026070101" });
+    expect(() =>
+      suggestCaptureTitleResponseSchema.parse({ title: "" }),
+    ).toThrow();
+    expect(() =>
+      suggestCaptureTitleResponseSchema.parse({ title: "x".repeat(257) }),
+    ).toThrow();
+
+    const durable = {
+      sessionId,
+      state: "recording" as const,
+      captureMode: "dual_track" as const,
+      captureTimelineMs: 1_000,
+      systemAudioHealthy: true,
+      microphoneHealthy: true,
+      partialCapture: false,
+      finalizedChunkCount: 0,
+      eventCount: 0,
+      gapCount: 0,
+      interruptionReason: null,
+      recordingSha256: null,
+    };
+    expect(captureSnapshotSchema.parse(durable)).toEqual(durable);
+    expect(() =>
+      captureSnapshotSchema.parse({ ...durable, audioActivity: 0.5 }),
+    ).toThrow();
+    expect(
+      captureRuntimeSnapshotSchema.parse({ ...durable, audioActivity: 0.5 }),
+    ).toMatchObject({ audioActivity: 0.5 });
+    for (const value of [0, 1]) {
+      expect(captureAudioActivitySchema.parse(value)).toBe(value);
+    }
+    for (const value of [Number.NaN, -0.01, 1.01]) {
+      expect(() => captureAudioActivitySchema.parse(value)).toThrow();
+    }
+
+    const baseApplication = {
+      protocolVersion: 2 as const,
+      revision: 1,
+      navigation: { section: "library" as const },
+      profile: { phase: "ready" as const, legacyDatabaseArchived: false },
+      connectivity: "online" as const,
+      capability: { processing: "available" as const },
+      library: { phase: "empty" as const },
+      reconciliation: [],
+    };
+    expect(
+      applicationSnapshotSchema.parse({
+        ...baseApplication,
+        capture: {
+          phase: "recording",
+          sessionId,
+          title: "产品回访",
+          elapsedMs: 1_000,
+          audioActivity: 1,
+        },
+      }).capture,
+    ).toMatchObject({ audioActivity: 1 });
+    expect(() =>
+      applicationSnapshotSchema.parse({
+        ...baseApplication,
+        capture: { phase: "idle", audioActivity: 0 },
+      }),
+    ).toThrow();
+  });
+
+  it("validates capture naming requests and responses in preload", async () => {
+    const invoke = vi.fn(async (channel: string) =>
+      channel === ipcChannels.captureTitleSuggest
+        ? { title: "新录音2026070101" }
+        : {
+            protocolVersion: 2,
+            revision: 2,
+            navigation: { section: "library" },
+            profile: { phase: "ready", legacyDatabaseArchived: false },
+            connectivity: "online",
+            capability: { processing: "available" },
+            library: { phase: "empty" },
+            reconciliation: [],
+            capture: { phase: "idle" },
+          },
+    );
+    const api = createDesktopApi({ invoke, on: vi.fn(), off: vi.fn() });
+
+    await expect(api.suggestCaptureTitle()).resolves.toEqual({
+      title: "新录音2026070101",
+    });
+    await expect(
+      api.renameCaptureSession({
+        sessionId: "session-capture-123456",
+        title: "  产品回访  ",
+      }),
+    ).resolves.toMatchObject({ revision: 2 });
+    expect(invoke).toHaveBeenLastCalledWith(ipcChannels.captureSessionRename, {
+      sessionId: "session-capture-123456",
+      title: "产品回访",
+    });
+
+    await expect(
+      api.renameCaptureSession({
+        sessionId: "bad",
+        title: "产品回访",
+      }),
+    ).rejects.toThrow();
+    expect(invoke).toHaveBeenCalledTimes(2);
+
+    invoke.mockResolvedValueOnce({ title: "" });
+    await expect(api.suggestCaptureTitle()).rejects.toThrow();
+
+    invoke.mockResolvedValueOnce({ revision: 3 } as never);
+    await expect(
+      api.renameCaptureSession({
+        sessionId: "session-capture-123456",
+        title: "产品回访",
+      }),
+    ).rejects.toThrow();
+  });
+
   it("exposes recheck as the only application bootstrap action", () => {
     expect(bootstrapActionRequestSchema.parse({ action: "recheck" })).toEqual({
       action: "recheck",

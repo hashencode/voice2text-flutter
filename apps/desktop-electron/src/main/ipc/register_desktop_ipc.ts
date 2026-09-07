@@ -53,6 +53,8 @@ export const desktopIpcInvokeChannels = [
   ipcChannels.capturePreflight,
   ipcChannels.captureStart,
   ipcChannels.captureControl,
+  ipcChannels.captureTitleSuggest,
+  ipcChannels.captureSessionRename,
   ipcChannels.microphoneTestStart,
   ipcChannels.microphoneTestSnapshot,
   ipcChannels.microphoneTestFinish,

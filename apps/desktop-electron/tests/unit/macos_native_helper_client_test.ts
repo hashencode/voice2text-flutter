@@ -18,6 +18,7 @@ import {
   NativeHelperCommandError,
   NativeHelperResponseError,
   NativeHelperTransportError,
+  parseCaptureRuntimeSnapshot,
 } from "../../src/main/features/importing/macos_native_helper_client";
 import {
   secureImportLimits,
@@ -25,6 +26,34 @@ import {
 } from "../../src/shared/contracts/import_processing";
 
 const roots: string[] = [];
+
+describe("capture runtime snapshot parsing", () => {
+  const capture = {
+    sessionId: "session-runtime-123456",
+    state: "recording",
+    captureMode: "dual_track",
+    captureTimelineMs: 1_000,
+    systemAudioHealthy: true,
+    microphoneHealthy: true,
+    partialCapture: false,
+    finalizedChunkCount: 0,
+    eventCount: 0,
+    gapCount: 0,
+    interruptionReason: null,
+    recordingSha256: null,
+    audioActivity: 0.75,
+  };
+
+  it("accepts bounded activity and rejects missing or out-of-range values", () => {
+    expect(parseCaptureRuntimeSnapshot(capture).audioActivity).toBe(0.75);
+    expect(() =>
+      parseCaptureRuntimeSnapshot({ ...capture, audioActivity: 1.01 }),
+    ).toThrow();
+    const missing: Record<string, unknown> = { ...capture };
+    delete missing.audioActivity;
+    expect(() => parseCaptureRuntimeSnapshot(missing)).toThrow();
+  });
+});
 
 afterEach(() => {
   for (const root of roots.splice(0))

@@ -138,6 +138,19 @@ function installApi() {
       speed: 1,
       error: null,
     })),
+    preflightCapture: vi.fn(async () => ({
+      minimumMacosVersion: "13.0",
+      systemAudioMinimumMacosVersion: "13.0",
+      captureMode: "dual_track" as const,
+      systemAudioPermission: "granted" as const,
+      microphonePermission: "granted" as const,
+      microphones: [],
+      availableBytes: 8 * 1024 ** 3,
+      requiredBytes: 2 * 1024 ** 3,
+      captionModelAvailable: true,
+      canStart: true,
+      blockingReasons: [],
+    })),
     listCaptureRecoveries: vi.fn(async () => []),
     getCaptionSnapshot: vi.fn(async () => null),
     onCaptionSnapshot: vi.fn(() => () => undefined),
@@ -209,10 +222,10 @@ describe("audio AI Renderer e2e", () => {
     await user.click(
       within(
         screen.getByRole("complementary", { name: "设置上下文面板" }),
-      ).getByRole("link", { name: "云端模型" }),
+      ).getByRole("button", { name: "云端模型" }),
     );
     expect(
-      await screen.findByRole("heading", { name: "云端模型", level: 2 }),
+      await screen.findByRole("region", { name: "云端模型" }),
     ).toBeVisible();
     await waitFor(() => expect(api.getAiSettings).toHaveBeenCalledTimes(1));
     expect(api.generateAudioAi).toHaveBeenCalledTimes(1);

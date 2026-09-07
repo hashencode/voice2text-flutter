@@ -85,6 +85,28 @@ describe("desktop IPC window registry", () => {
     ).rejects.toMatchObject({ code: "UNTRUSTED_SENDER" });
     expect(services.controlCapture).not.toHaveBeenCalled();
     await expect(
+      ipc.invoke(ipcChannels.captureTitleSuggest, main.event, {}),
+    ).resolves.toEqual({ title: "新录音2026070101" });
+    await expect(
+      ipc.invoke(ipcChannels.captureSessionRename, main.event, {
+        sessionId: "session-capture-123456",
+        title: "  产品回访  ",
+      }),
+    ).resolves.toMatchObject({ revision: 2 });
+    expect(services.renameCaptureSession).toHaveBeenCalledWith({
+      sessionId: "session-capture-123456",
+      title: "产品回访",
+    });
+    await expect(
+      ipc.invoke(ipcChannels.captureTitleSuggest, floating.event, {}),
+    ).rejects.toMatchObject({ code: "UNTRUSTED_SENDER" });
+    await expect(
+      ipc.invoke(ipcChannels.captureSessionRename, floating.event, {
+        sessionId: "session-capture-123456",
+        title: "产品回访",
+      }),
+    ).rejects.toMatchObject({ code: "UNTRUSTED_SENDER" });
+    await expect(
       ipc.invoke(ipcChannels.floatingCaptureSnapshotGet, floating.event, {}),
     ).resolves.toEqual(
       expect.objectContaining({ phase: "recording", sessionId: "opaque-1" }),
@@ -288,8 +310,11 @@ function createServices() {
   const floatingCaptureWindowAction = vi.fn(async () => floatingSnapshot());
   const createAiProviderProfile = vi.fn(async () => aiSettingsSnapshot());
   const requestBootstrapAction = vi.fn(async () => applicationSnapshot(1));
+  const renameCaptureSession = vi.fn(async () => applicationSnapshot(2));
   const defined: Partial<DesktopIpcServices> = {
     applicationSnapshot: () => applicationSnapshot(1),
+    suggestCaptureTitle: vi.fn(async () => ({ title: "新录音2026070101" })),
+    renameCaptureSession,
     requestBootstrapAction,
     markActivityRead: vi.fn(() => applicationSnapshot(1)),
     markAllActivityRead: vi.fn(() => applicationSnapshot(1)),
@@ -343,6 +368,7 @@ function createServices() {
     createAiProviderProfile,
     floatingCaptureWindowAction,
     requestBootstrapAction,
+    renameCaptureSession,
     emitApplicationSnapshot(snapshot: ReturnType<typeof applicationSnapshot>) {
       applicationListener?.(snapshot);
     },

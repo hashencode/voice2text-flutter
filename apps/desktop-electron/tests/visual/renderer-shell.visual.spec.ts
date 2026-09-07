@@ -71,30 +71,32 @@ test.describe("sidebar-09 production Renderer", () => {
     await withVisualSession("audio-active", 1280, 720, async (session) => {
       const { page } = session;
       await expect(
-        page.getByRole("heading", { name: "录制详情", level: 1 }),
+        page.getByRole("button", { name: "产品设计评审", exact: true }),
       ).toBeVisible();
       await expect(
-        page.getByRole("complementary", { name: "录制控制" }),
-      ).toHaveCount(0);
+        page.getByRole("button", { name: "编辑录制名称" }),
+      ).toBeVisible();
       await expect(
-        page.getByRole("region", { name: "录制详情" }),
+        page.getByRole("complementary", { name: "音频上下文面板" }),
+      ).toHaveCount(0);
+      await expect(page.getByRole("region", { name: "录制详情" })).toHaveCount(
+        1,
+      );
+      await expect(
+        page.locator('[data-shell-slot="content-footer"]'),
       ).toContainText("正在录制");
 
-      const headerHeights = await page.evaluate(() => ({
-        pane: document
-          .querySelector<HTMLElement>("[data-context-pane-fixed-header]")!
-          .getBoundingClientRect().height,
-        content: document
-          .querySelector<HTMLElement>('[data-slot="sidebar-inset"] > header')!
-          .getBoundingClientRect().height,
-      }));
-      expectWithin(headerHeights.pane, 50);
-      expectWithin(headerHeights.content, 50);
+      const headerHeight = await page.evaluate(
+        () =>
+          document
+            .querySelector<HTMLElement>('[data-slot="sidebar-inset"] > header')!
+            .getBoundingClientRect().height,
+      );
+      expectWithin(headerHeight, 50);
 
       await assertRuntimeContract(page, 1280, 720);
-      await assertDockedGeometry(page, 1280, 720);
-      await assertReferenceChrome(page, true);
-      await assertFlatRows(page, "音频列表");
+      await assertRailOnlyGeometry(page, 1280, 720, false);
+      await assertReferenceChrome(page, false, false);
       await assertCaptureContainment(page, 1280, 720, false);
       await screenshot(
         session,
@@ -252,24 +254,52 @@ test.describe("sidebar-09 production Renderer", () => {
     });
   });
 
-  test("880x620 docked Audio with capture recovery and internal scroll", async () => {
+  test("880x620 docked Audio with capture recovery dialog", async () => {
     await withVisualSession("audio-recovery", 880, 620, async (session) => {
       const { page } = session;
       await expect(
-        page.getByRole("heading", { name: "录制详情", level: 1 }),
-      ).toBeVisible();
-      await expect(
         page.getByRole("complementary", { name: "录制控制" }),
       ).toHaveCount(0);
+      const recoveryDialog = page.getByRole("dialog", {
+        name: "发现可恢复录制",
+      });
+      await expect(recoveryDialog).toBeVisible();
       await expect(
-        page.getByRole("heading", { name: "发现可恢复录制" }),
+        recoveryDialog.getByText("发现 6 段未完成的录音，可一次恢复并保存。"),
       ).toBeVisible();
-      await page.getByRole("button", { name: "管理恢复录制" }).first().click();
+      await expect(
+        recoveryDialog.getByText("Recover-产品设计评审 1"),
+      ).toHaveCount(0);
+      await expect(
+        recoveryDialog.getByRole("button", { name: "恢复所有录音" }),
+      ).toBeVisible();
+      await expect(
+        recoveryDialog.getByRole("button", { name: "管理恢复录制" }),
+      ).toBeVisible();
+      await expect(page.getByRole("region", { name: "录制详情" })).toHaveCount(
+        0,
+      );
+      await expect(
+        page.locator('[data-shell-slot="content-footer"]'),
+      ).toHaveCount(0);
 
       await assertRuntimeContract(page, 880, 620);
       await assertDockedGeometry(page, 880, 620);
-      await assertFlatRows(page, "音频列表");
-      await assertCaptureContainment(page, 880, 620, true);
+      const dialogGeometry = await recoveryDialog.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          rect: {
+            x: rect.x,
+            y: rect.y,
+            right: rect.right,
+            bottom: rect.bottom,
+          },
+        };
+      });
+      expect(dialogGeometry.rect.x).toBeGreaterThanOrEqual(0);
+      expect(dialogGeometry.rect.y).toBeGreaterThanOrEqual(0);
+      expect(dialogGeometry.rect.right).toBeLessThanOrEqual(880);
+      expect(dialogGeometry.rect.bottom).toBeLessThanOrEqual(620);
       await screenshot(session, "audio-overlay-capture-recovery.png", 880, 620);
     });
   });
@@ -709,7 +739,9 @@ async function assertReferenceChrome(
         '[data-context-pane-filters] button[aria-pressed="true"]',
       ),
       filtersBand: rect("[data-context-pane-filters]"),
-      title: rect('[data-slot="content-title"]'),
+      title: rect(
+        '[data-slot="content-title"], [data-shell-slot="custom-title"] button:first-child, [data-shell-slot="custom-title"] h1, [data-shell-slot="custom-title"] input',
+      ),
       separator: rect(
         '[data-shell-slot="content-head"] [data-slot="separator"]',
       ),
@@ -812,16 +844,29 @@ async function assertCaptureContainment(
   mustScroll: boolean,
 ) {
   const capture = page.getByRole("region", { name: "录制详情" });
+  const footer = page.locator('[data-shell-slot="content-footer"]');
+  await expect(footer).toBeVisible();
   const metrics = await capture.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     const style = getComputedStyle(element);
     const scrollContainer = element.closest<HTMLElement>("#main-content");
+    const footer = document.querySelector<HTMLElement>(
+      '[data-shell-slot="content-footer"]',
+    );
+    const footerRect = footer?.getBoundingClientRect();
+    const footerStyle = footer ? getComputedStyle(footer) : null;
     return {
       rect: toPlainRect(rect),
       position: style.position,
       boxShadow: style.boxShadow,
       containerClientHeight: scrollContainer?.clientHeight ?? 0,
       containerScrollHeight: scrollContainer?.scrollHeight ?? 0,
+      containerBottom: scrollContainer?.getBoundingClientRect().bottom ?? 0,
+      footer: footerRect ? toPlainRect(footerRect) : null,
+      footerBoxShadow: footerStyle?.boxShadow ?? null,
+      footerFlexWrap: footerStyle?.flexWrap ?? null,
+      footerClientWidth: footer?.clientWidth ?? 0,
+      footerScrollWidth: footer?.scrollWidth ?? 0,
     };
 
     function toPlainRect(value: DOMRect) {
@@ -840,6 +885,15 @@ async function assertCaptureContainment(
   expect(metrics.rect.y).toBeGreaterThanOrEqual(0);
   expect(metrics.position).not.toBe("fixed");
   expect(metrics.boxShadow).toBe("none");
+  if (!metrics.footer) throw new Error("Expected a capture footer");
+  expectWithin(metrics.footer.y, metrics.containerBottom);
+  expect(metrics.footer.right).toBeLessThanOrEqual(width);
+  expect(metrics.footer.bottom).toBeLessThanOrEqual(height);
+  expect(metrics.footerBoxShadow).toBe("none");
+  expect(metrics.footerFlexWrap).toBe("nowrap");
+  expect(metrics.footerScrollWidth).toBeLessThanOrEqual(
+    metrics.footerClientWidth,
+  );
   if (mustScroll) {
     expect(metrics.rect.width).toBeLessThanOrEqual(768);
     expect(metrics.containerScrollHeight).toBeGreaterThan(
@@ -847,7 +901,6 @@ async function assertCaptureContainment(
     );
   } else {
     expect(metrics.rect.bottom).toBeLessThanOrEqual(height);
-    expect(metrics.rect.height).toBeGreaterThan(0);
   }
 }
 
